@@ -1,6 +1,6 @@
 import {
-	App,
-	Editor,
+	type App,
+	type Editor,
 	MarkdownView,
 	Modal,
 	Notice,
@@ -18,6 +18,41 @@ interface MyPluginSettings {
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	mySetting: "default",
 };
+
+function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
+	const f = view.file;
+	if (!f) return null;
+	const cache = app.metadataCache.getFileCache(f);
+	if (!cache) return null;
+	const headings = cache.headings || [];
+
+	const headingPath = [];
+	let currentHeading = null;
+	for (let i = headings.length - 1; i >= 0; i--) {
+		const heading = headings[i];
+		if (currentHeading) {
+			if (
+				heading.position.start.line <
+					currentHeading.position.start.line &&
+				heading.level < currentHeading.level
+			) {
+				headingPath.unshift(heading);
+				currentHeading = heading;
+			}
+		} else {
+			if (heading.position.start.line <= editor.getCursor().line) {
+				// ok we found the heading containing the cursor, start from here
+				headingPath.unshift(heading);
+				currentHeading = heading;
+			}
+		}
+	}
+
+	if (!currentHeading) return null;
+
+	//
+	console.log(headingPath);
+}
 
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
@@ -45,8 +80,9 @@ export default class MyPlugin extends Plugin {
 			id: "ai-chat-complete",
 			name: "Do the thing",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
-			editorCallback: (editor: Editor) => {
-				editor.replaceRange("hello there", editor.getCursor());
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				convertToMessages(this.app, editor, view);
+				//editor.replaceRange("hello there", editor.getCursor());
 			},
 		});
 
