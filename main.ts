@@ -8,15 +8,15 @@ import {
 	PluginSettingTab,
 	Setting,
 } from "obsidian";
-
+import OpenAI from "openai";
 // Remember to rename these classes and interfaces!
 
-interface MyPluginSettings {
-	mySetting: string;
+interface AIChatAsMDSettings {
+	openAIAPIKey: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: "default",
+const DEFAULT_SETTINGS: AIChatAsMDSettings = {
+	openAIAPIKey: "sk-xxxx",
 };
 
 function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
@@ -55,7 +55,7 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 }
 
 export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+	settings: AIChatAsMDSettings;
 
 	async onload() {
 		await this.loadSettings();
@@ -80,8 +80,25 @@ export default class MyPlugin extends Plugin {
 			id: "ai-chat-complete",
 			name: "Do the thing",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
-			editorCallback: (editor: Editor, view: MarkdownView) => {
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
 				convertToMessages(this.app, editor, view);
+
+				const openai = new OpenAI({
+					baseURL: "https://openrouter.ai/api/v1",
+					apiKey: this.settings.openAIAPIKey,
+					defaultHeaders: {
+						"HTTP-Referer":
+							"https://github.com/cpbotha/obsidian-ai-chat-as-md", // Optional, for including your app on openrouter.ai rankings.
+						"X-Title": "Obsidian AI Chat as Markdown", // Optional. Shows in rankings on openrouter.ai.
+					},
+					// dangerouslyAllowBrowser: true,
+				});
+
+				const completion = await openai.chat.completions.create({
+					model: "anthropic/claude-3.5-sonnet",
+					messages: [{ role: "user", content: "Say this is a test" }],
+				});
+
 				//editor.replaceRange("hello there", editor.getCursor());
 			},
 		});
@@ -189,9 +206,9 @@ class SampleSettingTab extends PluginSettingTab {
 			.addText((text) =>
 				text
 					.setPlaceholder("Enter your secret")
-					.setValue(this.plugin.settings.mySetting)
+					.setValue(this.plugin.settings.openAIAPIKey)
 					.onChange(async (value) => {
-						this.plugin.settings.mySetting = value;
+						this.plugin.settings.openAIAPIKey = value;
 						await this.plugin.saveSettings();
 					})
 			);
