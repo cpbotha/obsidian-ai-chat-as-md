@@ -28,6 +28,7 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 	if (!cache) return null;
 	const headings = cache.headings || [];
 
+	// store indices of headings from the top-most to where the cursor is
 	const headingPath = [];
 	let currentHeading = null;
 	for (let i = headings.length - 1; i >= 0; i--) {
@@ -38,13 +39,13 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 					currentHeading.position.start.line &&
 				heading.level < currentHeading.level
 			) {
-				headingPath.unshift(heading);
+				headingPath.unshift(i);
 				currentHeading = heading;
 			}
 		} else {
 			if (heading.position.start.line <= editor.getCursor().line) {
 				// ok we found the heading containing the cursor, start from here
-				headingPath.unshift(heading);
+				headingPath.unshift(i);
 				currentHeading = heading;
 			}
 		}
@@ -52,8 +53,36 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 
 	if (!currentHeading) return null;
 
-	//
-	console.log(headingPath);
+	for (const i of headingPath) {
+		const heading = headings[i];
+		const nextHeading = headings[i + 1];
+		let rangeEnd: EditorPosition;
+		if (nextHeading) {
+			// discovered that ch: -1 is the end of the line
+			rangeEnd = {
+				line: nextHeading.position.start.line - 1,
+				ch: -1,
+			};
+		} else {
+			const lastLine = editor.lastLine();
+			rangeEnd = {
+				line: lastLine,
+				ch: editor.getLine(lastLine).length,
+			};
+		}
+		// EditorPosition has ch and line
+		const m = editor.getRange(
+			{ line: heading.position.end.line + 1, ch: 0 },
+			rangeEnd
+		);
+
+		console.log(`${i} ${heading.heading} ===> ${m} <====`);
+		//console.log(heading.heading);
+	}
+
+	// for later when I need to fish out images
+	// https://docs.obsidian.md/Reference/TypeScript+API/EmbedCache
+	// cache.embeds;
 }
 
 async function getOpenAI() {
@@ -114,9 +143,9 @@ export default class MyPlugin extends Plugin {
 			name: "Do the thing",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
-				//convertToMessages(this.app, editor, view);
+				convertToMessages(this.app, editor, view);
 
-				replaceRangeMoveCursor(editor, "hello there!\nhow you doing?");
+				//replaceRangeMoveCursor(editor, "hello there!\nhow you doing?");
 				//editor.replaceRange("hello there", editor.getCursor());
 			},
 		});
