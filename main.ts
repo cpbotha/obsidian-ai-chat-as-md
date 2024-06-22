@@ -53,10 +53,12 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 
 	if (!currentHeading) return null;
 
+	const messages: OpenAI.ChatCompletionMessageParam[] = [];
+	// we want to return the last rangeEnd, so that the calling code can move the cursor there
+	let rangeEnd: EditorPosition;
 	for (const i of headingPath) {
 		const heading = headings[i];
 		const nextHeading = headings[i + 1];
-		let rangeEnd: EditorPosition;
 		if (nextHeading) {
 			// discovered that ch: -1 is the end of the line
 			rangeEnd = {
@@ -76,9 +78,18 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 			rangeEnd
 		);
 
-		console.log(`${i} ${heading.heading} ===> ${m} <====`);
+		const uHeading = heading.heading.toUpperCase();
+		const role =
+			uHeading.startsWith("AI") || uHeading.startsWith("ASSISTANT")
+				? "assistant"
+				: "user";
+
+		messages.push({ role: role, content: m });
+		//console.log(`${i} ${heading.heading} ===> ${m} <====`);
 		//console.log(heading.heading);
 	}
+
+	console.log(messages);
 
 	// for later when I need to fish out images
 	// https://docs.obsidian.md/Reference/TypeScript+API/EmbedCache
@@ -99,7 +110,19 @@ async function getOpenAI() {
 
 	const completion = await openai.chat.completions.create({
 		model: "anthropic/claude-3.5-sonnet",
-		messages: [{ role: "user", content: "Say this is a test" }],
+		messages: [
+			{ role: "assistant", content: "Say this is a test" },
+			{
+				role: "user",
+				content: [
+					{ type: "text", text: "hello" },
+					{
+						type: "image_url",
+						image_url: { url: "https://bleh.com/bleh.png" },
+					},
+				],
+			},
+		],
 	});
 }
 
