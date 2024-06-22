@@ -7,6 +7,7 @@ import {
 	Plugin,
 	PluginSettingTab,
 	Setting,
+	EditorPosition,
 } from "obsidian";
 import OpenAI from "openai";
 // Remember to rename these classes and interfaces!
@@ -19,6 +20,7 @@ const DEFAULT_SETTINGS: AIChatAsMDSettings = {
 	openAIAPIKey: "sk-xxxx",
 };
 
+// find current cursor position, determine its heading path, then convert that path into messages
 function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 	const f = view.file;
 	if (!f) return null;
@@ -54,6 +56,37 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 	console.log(headingPath);
 }
 
+async function getOpenAI() {
+	const openai = new OpenAI({
+		baseURL: "https://openrouter.ai/api/v1",
+		apiKey: this.settings.openAIAPIKey,
+		defaultHeaders: {
+			"HTTP-Referer": "https://github.com/cpbotha/obsidian-ai-chat-as-md", // Optional, for including your app on openrouter.ai rankings.
+			"X-Title": "Obsidian AI Chat as Markdown", // Optional. Shows in rankings on openrouter.ai.
+		},
+		// we are running in a browser environment, but we are using obsidian settings to get keys, so we can enable this
+		dangerouslyAllowBrowser: true,
+	});
+
+	const completion = await openai.chat.completions.create({
+		model: "anthropic/claude-3.5-sonnet",
+		messages: [{ role: "user", content: "Say this is a test" }],
+	});
+}
+
+// replace range, but also move cursor ahead to be located right after the inserted multi-line text
+function replaceRangeMoveCursor(editor: Editor, text: string) {
+	const cursor = editor.getCursor();
+	editor.replaceRange(text, cursor);
+	const lines = text.split("\n");
+	editor.setCursor({
+		line: cursor.line + lines.length - 1,
+		// if only one line, we have to add the new text length to existing
+		// if more than one line, then the final line determines the ch position
+		ch: lines.length === 1 ? cursor.ch : 0 + lines[lines.length - 1].length,
+	});
+}
+
 export default class MyPlugin extends Plugin {
 	settings: AIChatAsMDSettings;
 
@@ -81,24 +114,9 @@ export default class MyPlugin extends Plugin {
 			name: "Do the thing",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
-				convertToMessages(this.app, editor, view);
+				//convertToMessages(this.app, editor, view);
 
-				const openai = new OpenAI({
-					baseURL: "https://openrouter.ai/api/v1",
-					apiKey: this.settings.openAIAPIKey,
-					defaultHeaders: {
-						"HTTP-Referer":
-							"https://github.com/cpbotha/obsidian-ai-chat-as-md", // Optional, for including your app on openrouter.ai rankings.
-						"X-Title": "Obsidian AI Chat as Markdown", // Optional. Shows in rankings on openrouter.ai.
-					},
-					// dangerouslyAllowBrowser: true,
-				});
-
-				const completion = await openai.chat.completions.create({
-					model: "anthropic/claude-3.5-sonnet",
-					messages: [{ role: "user", content: "Say this is a test" }],
-				});
-
+				replaceRangeMoveCursor(editor, "hello there!\nhow you doing?");
 				//editor.replaceRange("hello there", editor.getCursor());
 			},
 		});
