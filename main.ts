@@ -1,16 +1,17 @@
 import {
-	type App,
-	type Editor,
 	MarkdownView,
 	Modal,
 	Notice,
 	Plugin,
 	PluginSettingTab,
 	Setting,
-	EditorPosition,
+	type App,
+	type Editor,
+	type EditorPosition,
+	type HeadingCache,
 } from "obsidian";
+
 import OpenAI from "openai";
-// Remember to rename these classes and interfaces!
 
 interface AIChatAsMDSettings {
 	openAIAPIKey: string;
@@ -55,15 +56,16 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 
 	const messages: OpenAI.ChatCompletionMessageParam[] = [];
 	// we want to return the last rangeEnd, so that the calling code can move the cursor there
-	let rangeEnd: EditorPosition;
+	let rangeEnd: EditorPosition = { line: 0, ch: 0 };
+	let heading = null;
 	for (const i of headingPath) {
-		const heading = headings[i];
+		heading = headings[i];
 		const nextHeading = headings[i + 1];
 		if (nextHeading) {
-			// discovered that ch: -1 is the end of the line
+			const line = nextHeading.position.start.line - 1;
 			rangeEnd = {
-				line: nextHeading.position.start.line - 1,
-				ch: -1,
+				line: line,
+				ch: editor.getLine(line).length,
 			};
 		} else {
 			const lastLine = editor.lastLine();
@@ -89,25 +91,19 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 		//console.log(heading.heading);
 	}
 
-	console.log(messages);
+	if (!heading) {
+		console.error("Unexpected that we have no last heading here.");
+		return null;
+	}
+
+	return { messages, heading, rangeEnd };
 
 	// for later when I need to fish out images
 	// https://docs.obsidian.md/Reference/TypeScript+API/EmbedCache
 	// cache.embeds;
 }
 
-async function getOpenAI() {
-	const openai = new OpenAI({
-		baseURL: "https://openrouter.ai/api/v1",
-		apiKey: this.settings.openAIAPIKey,
-		defaultHeaders: {
-			"HTTP-Referer": "https://github.com/cpbotha/obsidian-ai-chat-as-md", // Optional, for including your app on openrouter.ai rankings.
-			"X-Title": "Obsidian AI Chat as Markdown", // Optional. Shows in rankings on openrouter.ai.
-		},
-		// we are running in a browser environment, but we are using obsidian settings to get keys, so we can enable this
-		dangerouslyAllowBrowser: true,
-	});
-
+async function testOpenAI() {
 	const completion = await openai.chat.completions.create({
 		model: "anthropic/claude-3.5-sonnet",
 		messages: [
@@ -135,7 +131,9 @@ function replaceRangeMoveCursor(editor: Editor, text: string) {
 		line: cursor.line + lines.length - 1,
 		// if only one line, we have to add the new text length to existing
 		// if more than one line, then the final line determines the ch position
-		ch: lines.length === 1 ? cursor.ch : 0 + lines[lines.length - 1].length,
+		ch:
+			(lines.length === 1 ? cursor.ch : 0) +
+			lines[lines.length - 1].length,
 	});
 }
 
@@ -166,10 +164,27 @@ export default class MyPlugin extends Plugin {
 			name: "Do the thing",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
-				convertToMessages(this.app, editor, view);
+				const mhe = convertToMessages(this.app, editor, view);
+				if (!mhe) {
+					new Notice("No headings found");
+					return;
+				}
 
-				//replaceRangeMoveCursor(editor, "hello there!\nhow you doing?");
-				//editor.replaceRange("hello there", editor.getCursor());
+				editor.setCursor(mhe.rangeEnd);
+				// create heading that's one level deeper than the one we are replying to
+				const aiLevel = mhe.heading.level + 1;
+				const aiHeading = `\n\n${"#".repeat(aiLevel)} AI\n`;
+
+				replaceRangeMoveCursor(editor, aiHeading);
+
+				const stream = await this.getOpenAIStream(mhe.messages);
+				for await (const chunk of stream) {
+					const content = chunk.choices[0]?.delta?.content || "";
+					replaceRangeMoveCursor(editor, content);
+				}
+
+				const userHeading = `\n\n${"#".repeat(aiLevel + 1)} User\n`;
+				replaceRangeMoveCursor(editor, userHeading);
 			},
 		});
 
@@ -238,6 +253,34 @@ export default class MyPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	async getOpenAI() {
+		const openai = new OpenAI({
+			baseURL: "https://openrouter.ai/api/v1",
+			apiKey: this.settings.openAIAPIKey,
+			defaultHeaders: {
+				"HTTP-Referer":
+					"https://github.com/cpbotha/obsidian-ai-chat-as-md", // Optional, for including your app on openrouter.ai rankings.
+				"X-Title": "Obsidian AI Chat as Markdown", // Optional. Shows in rankings on openrouter.ai.
+			},
+			// we are running in a browser environment, but we are using obsidian settings to get keys, so we can enable this
+			dangerouslyAllowBrowser: true,
+		});
+
+		return openai;
+	}
+
+	async getOpenAIStream(messages: OpenAI.ChatCompletionMessageParam[]) {
+		const openai = await this.getOpenAI();
+
+		// TODO: consider system prompt
+		return openai.chat.completions.create({
+			// TODO: setting
+			model: "anthropic/claude-3.5-sonnet",
+			messages: messages,
+			stream: true,
+		});
 	}
 }
 
