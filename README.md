@@ -5,8 +5,10 @@ Heavy WIP.
 ## Tasks
 
 - [ ] Send embedded images to the model
+- [ ] settings for default model, key, etc.
 - [ ] ignore `%` comment lines
 - [ ] Add used model as comment line to each AI response section
+- [ ] enable per-document / yaml-header overrides of model, system prompt, etc.
 
 ## First time developing plugins?
 
