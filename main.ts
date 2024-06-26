@@ -15,7 +15,7 @@ import {
 } from "obsidian";
 
 import OpenAI from "openai";
-
+import { readAndCompressImage } from "@misskey-dev/browser-image-resizer";
 interface AIChatAsMDSettings {
 	openAIAPIKey: string;
 }
@@ -163,10 +163,22 @@ async function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 					const f = this.app.vault.getFileByPath(part.embed.link);
 					// check that f is an image
 					if (f && isImageFile(f)) {
-						//https://github.com/xRyul/obsidian-image-converter/blob/master/src/main.ts#L1719
+						// see below for a quick and dirty canvas thingy:
+						// https://github.com/sissilab/obsidian-image-toolkit/issues/4
+						// our embed could be a remote link or a local file! will it help to getResourcePath and then use that?
+						// ARGH: this image is already loaded into the HTML5 canvas, why can't I just get the blob?
+						// we need either < 512x512 or < 2000x768 (low or high fidelity)
+						// https://platform.openai.com/docs/guides/vision/low-or-high-fidelity-image-understanding
+						// intricate example to resize images:
+						// https://github.com/xRyul/obsidian-image-converter/blob/master/src/main.ts#L1719
+						// https://www.npmjs.com/package/browser-image-resizer
+						// https://github.com/misskey-dev/browser-image-resizer
 						console.log(this.app.vault.getResourcePath(f));
 						// ArrayBuffer
 						const imageData = await this.app.vault.readBinary(f);
+						// convert imageData ArrayBuffer into ImageBitmapSource
+
+						readAndCompressImage(imageData, {});
 						const base64 = arrayBufferToBase64(imageData);
 						contentParts.push({
 							type: "image_url",
