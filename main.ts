@@ -1,4 +1,5 @@
 import {
+	type EmbedCache,
 	MarkdownView,
 	Modal,
 	Notice,
@@ -9,6 +10,8 @@ import {
 	type Editor,
 	type EditorPosition,
 	type HeadingCache,
+	type TFile,
+	arrayBufferToBase64,
 } from "obsidian";
 
 import OpenAI from "openai";
@@ -21,8 +24,14 @@ const DEFAULT_SETTINGS: AIChatAsMDSettings = {
 	openAIAPIKey: "sk-xxxx",
 };
 
+function isImageFile(file: TFile): boolean {
+	// https://platform.openai.com/docs/guides/vision/what-type-of-files-can-i-upload
+	const imageExtensions = ["png", "jpg", "jpeg", "gif", "webp"];
+	return imageExtensions.includes(file.extension.toLowerCase());
+}
+
 // find current cursor position, determine its heading path, then convert that path into messages
-function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
+async function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 	const f = view.file;
 	if (!f) return null;
 	const cache = app.metadataCache.getFileCache(f);
@@ -58,6 +67,8 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 	// we want to return the last rangeEnd, so that the calling code can move the cursor there
 	let rangeEnd: EditorPosition = { line: 0, ch: 0 };
 	let heading = null;
+	// we want to find embeds in the range
+	let rangeEndOffset = -1;
 	for (const i of headingPath) {
 		heading = headings[i];
 		const nextHeading = headings[i + 1];
@@ -67,18 +78,16 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 				line: line,
 				ch: editor.getLine(line).length,
 			};
+			rangeEndOffset = nextHeading.position.start.offset - 1;
 		} else {
+			// this is the last heading, so we have to use end of file
 			const lastLine = editor.lastLine();
 			rangeEnd = {
 				line: lastLine,
 				ch: editor.getLine(lastLine).length,
 			};
+			rangeEndOffset = editor.getValue().length;
 		}
-		// EditorPosition has ch and line
-		const m = editor.getRange(
-			{ line: heading.position.end.line + 1, ch: 0 },
-			rangeEnd
-		);
 
 		const uHeading = heading.heading.toUpperCase();
 		const role =
@@ -86,9 +95,94 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 				? "assistant"
 				: "user";
 
-		messages.push({ role: role, content: m });
-		//console.log(`${i} ${heading.heading} ===> ${m} <====`);
-		//console.log(heading.heading);
+		if (role === "assistant") {
+			// assistant can only have content as a single string!
+			const m = editor.getRange(
+				{ line: heading.position.end.line + 1, ch: 0 },
+				rangeEnd
+			);
+			messages.push({ role: role, content: m });
+		} else {
+			// user message, so we do multi-part
+			let currentStart = heading.position.end.offset + 1;
+
+			const parts = [];
+
+			const embeds = cache.embeds || [];
+
+			let embed: EmbedCache | null = null;
+			for (embed of embeds) {
+				if (
+					embed.position.start.offset > heading.position.end.offset &&
+					embed.position.end.offset < rangeEndOffset
+				) {
+					if (embed.position.start.offset > currentStart) {
+						// this means there's text before the embed, let's add it
+						// EditorPosition has ch and line
+						// however, note that CM6 prefers offsets to the old CM5 line-ch pairs: https://codemirror.net/docs/migration/#positions
+						// fortunately, Obsidian's Editor abstraction offers posToOffset and offsetToPos
+						parts.push({
+							type: "text",
+							text: editor
+								.getRange(
+									editor.offsetToPos(currentStart),
+									editor.offsetToPos(
+										embed.position.start.offset
+									)
+								)
+								.trim(),
+						});
+					}
+					// TODO: check that the embed is an image / other processable type
+					parts.push({
+						type: "embed",
+						embed,
+					});
+					currentStart = embed.position.end.offset;
+				}
+			}
+
+			// take care of last bit of text
+			if (rangeEndOffset > currentStart) {
+				parts.push({
+					type: "text",
+					text: editor
+						.getRange(
+							editor.offsetToPos(currentStart),
+							editor.offsetToPos(rangeEndOffset)
+						)
+						.trim(),
+				});
+			}
+
+			const contentParts: Array<OpenAI.ChatCompletionContentPart> = [];
+			for (const part of parts) {
+				if (part.type === "text" && part.text) {
+					contentParts.push(part as OpenAI.ChatCompletionContentPart);
+				} else if (part.type === "embed" && part.embed?.link) {
+					const f = this.app.vault.getFileByPath(part.embed.link);
+					// check that f is an image
+					if (f && isImageFile(f)) {
+						//https://github.com/xRyul/obsidian-image-converter/blob/master/src/main.ts#L1719
+						console.log(this.app.vault.getResourcePath(f));
+						// ArrayBuffer
+						const imageData = await this.app.vault.readBinary(f);
+						const base64 = arrayBufferToBase64(imageData);
+						contentParts.push({
+							type: "image_url",
+							image_url: {
+								url: `data:image/${f.extension};base64,${base64}`,
+							},
+						});
+					}
+				}
+			}
+
+			messages.push({
+				role: role,
+				content: contentParts,
+			});
+		}
 	}
 
 	if (!heading) {
@@ -97,29 +191,6 @@ function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 	}
 
 	return { messages, heading, rangeEnd };
-
-	// for later when I need to fish out images
-	// https://docs.obsidian.md/Reference/TypeScript+API/EmbedCache
-	// cache.embeds;
-}
-
-async function testOpenAI() {
-	const completion = await openai.chat.completions.create({
-		model: "anthropic/claude-3.5-sonnet",
-		messages: [
-			{ role: "assistant", content: "Say this is a test" },
-			{
-				role: "user",
-				content: [
-					{ type: "text", text: "hello" },
-					{
-						type: "image_url",
-						image_url: { url: "https://bleh.com/bleh.png" },
-					},
-				],
-			},
-		],
-	});
 }
 
 // replace range, but also move cursor ahead to be located right after the inserted multi-line text
@@ -164,11 +235,14 @@ export default class MyPlugin extends Plugin {
 			name: "Do the thing",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
-				const mhe = convertToMessages(this.app, editor, view);
+				const mhe = await convertToMessages(this.app, editor, view);
 				if (!mhe) {
 					new Notice("No headings found");
 					return;
 				}
+				console.log(mhe.messages);
+
+				return;
 
 				editor.setCursor(mhe.rangeEnd);
 				// create heading that's one level deeper than the one we are replying to
