@@ -15,7 +15,7 @@ import {
 } from "obsidian";
 
 import OpenAI from "openai";
-import { readAndCompressImage } from "@misskey-dev/browser-image-resizer";
+
 interface AIChatAsMDSettings {
 	openAIAPIKey: string;
 }
@@ -28,6 +28,43 @@ function isImageFile(file: TFile): boolean {
 	// https://platform.openai.com/docs/guides/vision/what-type-of-files-can-i-upload
 	const imageExtensions = ["png", "jpg", "jpeg", "gif", "webp"];
 	return imageExtensions.includes(file.extension.toLowerCase());
+}
+
+// based on https://github.com/sissilab/obsidian-image-toolkit/issues/4#issuecomment-908898483
+function imageToDataURL(imgSrc: string, maxEdge = 512) {
+	return new Promise<{ dataURL: string; x: number; y: number }>(
+		(resolve, reject) => {
+			const image = new Image();
+			image.crossOrigin = "anonymous";
+			image.onload = () => {
+				const dims = [image.width, image.height];
+				const longestEdgeIndex = dims[0] > dims[1] ? 0 : 1;
+				if (dims[longestEdgeIndex] > maxEdge) {
+					const downscaleFactor = maxEdge / dims[longestEdgeIndex];
+					for (let i = 0; i < 2; i++) {
+						dims[i] = Math.round(dims[i] * downscaleFactor);
+					}
+					console.log(`resizing to ${dims[0]} x ${dims[1]}`);
+				}
+				const canvas = document.createElement("canvas");
+				canvas.width = dims[0];
+				canvas.height = dims[1];
+				const ctx = canvas.getContext("2d");
+				if (ctx === null) {
+					reject("Could not get 2d context from canvas");
+					return;
+				}
+				ctx.drawImage(image, 0, 0, dims[0], dims[1]);
+
+				// toDataURL() returns e.g. data:image/png;base64,....
+				// https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toDataURL
+				const dataURL = canvas.toDataURL("image/jpeg");
+				resolve({ dataURL, x: dims[0], y: dims[1] });
+			};
+
+			image.src = imgSrc;
+		}
+	);
 }
 
 // find current cursor position, determine its heading path, then convert that path into messages
@@ -161,31 +198,32 @@ async function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 					contentParts.push(part as OpenAI.ChatCompletionContentPart);
 				} else if (part.type === "embed" && part.embed?.link) {
 					const f = this.app.vault.getFileByPath(part.embed.link);
-					// check that f is an image
-					if (f && isImageFile(f)) {
-						// see below for a quick and dirty canvas thingy:
-						// https://github.com/sissilab/obsidian-image-toolkit/issues/4
-						// our embed could be a remote link or a local file! will it help to getResourcePath and then use that?
-						// ARGH: this image is already loaded into the HTML5 canvas, why can't I just get the blob?
-						// we need either < 512x512 or < 2000x768 (low or high fidelity)
-						// https://platform.openai.com/docs/guides/vision/low-or-high-fidelity-image-understanding
-						// intricate example to resize images:
-						// https://github.com/xRyul/obsidian-image-converter/blob/master/src/main.ts#L1719
-						// https://www.npmjs.com/package/browser-image-resizer
-						// https://github.com/misskey-dev/browser-image-resizer
-						console.log(this.app.vault.getResourcePath(f));
-						// ArrayBuffer
-						const imageData = await this.app.vault.readBinary(f);
-						// convert imageData ArrayBuffer into ImageBitmapSource
+					if (f) {
+						try {
+							// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
+							// longest edge should be < 1568
+							// openai gpt-4o
+							// we need either < 512x512 or < 2000x768 (low or high fidelity)
+							const { dataURL, x, y } = await imageToDataURL(
+								this.app.vault.getResourcePath(f),
+								1568
+							);
 
-						readAndCompressImage(imageData, {});
-						const base64 = arrayBufferToBase64(imageData);
-						contentParts.push({
-							type: "image_url",
-							image_url: {
-								url: `data:image/${f.extension};base64,${base64}`,
-							},
-						});
+							// DEBUG: show image in the console -- working on 2024-06-27
+							// console.log(
+							// 	"%c ",
+							// 	`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
+							// );
+
+							contentParts.push({
+								type: "image_url",
+								image_url: {
+									url: dataURL,
+								},
+							});
+						} catch (e) {
+							console.error("Error copying image", f, e);
+						}
 					}
 				}
 			}
@@ -252,9 +290,6 @@ export default class MyPlugin extends Plugin {
 					new Notice("No headings found");
 					return;
 				}
-				console.log(mhe.messages);
-
-				return;
 
 				editor.setCursor(mhe.rangeEnd);
 				// create heading that's one level deeper than the one we are replying to
