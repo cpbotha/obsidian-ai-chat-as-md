@@ -58,7 +58,9 @@ function imageToDataURL(imgSrc: string, maxEdge = 512) {
 
 				// toDataURL() returns e.g. data:image/png;base64,....
 				// https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toDataURL
-				const dataURL = canvas.toDataURL("image/jpeg");
+				// we webp which should give smaller files for the same quality
+				// https://developers.google.com/speed/webp/docs/webp_study
+				const dataURL = canvas.toDataURL("image/webp");
 				resolve({ dataURL, x: dims[0], y: dims[1] });
 			};
 
@@ -214,6 +216,8 @@ async function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 							// 	"%c ",
 							// 	`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
 							// );
+
+							// console.log(dataURL);
 
 							contentParts.push({
 								type: "image_url",
