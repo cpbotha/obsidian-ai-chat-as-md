@@ -17,11 +17,23 @@ import {
 import OpenAI from "openai";
 
 interface AIChatAsMDSettings {
+	apiHost: string;
 	openAIAPIKey: string;
+	systemPrompt: string;
 }
 
 const DEFAULT_SETTINGS: AIChatAsMDSettings = {
+	apiHost: "https://api.openai.com",
 	openAIAPIKey: "sk-xxxx",
+	systemPrompt: `You are an AI assistant, outputting into an Obsidian markdown document. You have access to and can interpret fenced codeblocks and MathJax notation. When responding:
+
+1. Use markdown formatting for text styling and organization, but avoid using # headings as your output could be streaming into a deeply nested part of the markdown document.
+2. Use fenced codeblocks with language specification for any code snippets.
+3. Employ MathJax notation (enclosed in $$ for block-level or $ for inline) for mathematical expressions.
+4. If referencing other parts of the document, use Obsidian's internal linking syntax [[like this]].
+5. Maintain a helpful, friendly, and knowledgeable tone.
+
+Your responses should be clear, concise, and tailored to the user's needs within the context of a note-taking and knowledge management environment.`,
 };
 
 function isImageFile(file: TFile): boolean {
@@ -70,7 +82,12 @@ function imageToDataURL(imgSrc: string, maxEdge = 512) {
 }
 
 // find current cursor position, determine its heading path, then convert that path into messages
-async function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
+async function convertToMessages(
+	systemMessage: string,
+	app: App,
+	editor: Editor,
+	view: MarkdownView
+) {
 	const f = view.file;
 	if (!f) return null;
 	const cache = app.metadataCache.getFileCache(f);
@@ -102,7 +119,9 @@ async function convertToMessages(app: App, editor: Editor, view: MarkdownView) {
 
 	if (!currentHeading) return null;
 
-	const messages: OpenAI.ChatCompletionMessageParam[] = [];
+	const messages: OpenAI.ChatCompletionMessageParam[] = [
+		{ role: "system", content: systemMessage },
+	];
 	// we want to return the last rangeEnd, so that the calling code can move the cursor there
 	let rangeEnd: EditorPosition = { line: 0, ch: 0 };
 	let heading = null;
@@ -289,7 +308,12 @@ export default class MyPlugin extends Plugin {
 			name: "Do the thing",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
-				const mhe = await convertToMessages(this.app, editor, view);
+				const mhe = await convertToMessages(
+					this.settings.systemPrompt,
+					this.app,
+					editor,
+					view
+				);
 				if (!mhe) {
 					new Notice("No headings found");
 					return;
@@ -302,6 +326,7 @@ export default class MyPlugin extends Plugin {
 
 				replaceRangeMoveCursor(editor, aiHeading);
 
+				console.log(mhe.messages);
 				const stream = await this.getOpenAIStream(mhe.messages);
 				for await (const chunk of stream) {
 					const content = chunk.choices[0]?.delta?.content || "";
@@ -382,7 +407,8 @@ export default class MyPlugin extends Plugin {
 
 	async getOpenAI() {
 		const openai = new OpenAI({
-			baseURL: "https://openrouter.ai/api/v1",
+			// "https://openrouter.ai/api/v1" or "https://api.openai.com/v1"
+			baseURL: `${this.settings.apiHost}/v1`,
 			apiKey: this.settings.openAIAPIKey,
 			defaultHeaders: {
 				"HTTP-Referer":
@@ -439,6 +465,21 @@ class SampleSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
+			.setName("API host")
+			.setDesc("e.g. https://api.openai.com or https://openrouter.ai/api")
+			.addText((text) =>
+				text
+					.setPlaceholder(
+						"Enter the API host, e.g. https://api.openai.com"
+					)
+					.setValue("https://openrouter.ai/api")
+					.onChange(async (value) => {
+						this.plugin.settings.apiHost = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
 			.setName("Setting #1")
 			.setDesc("It's a secret")
 			.addText((text) =>
@@ -447,6 +488,18 @@ class SampleSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.openAIAPIKey)
 					.onChange(async (value) => {
 						this.plugin.settings.openAIAPIKey = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("System Prompt")
+			.addTextArea((textArea) =>
+				textArea
+					.setPlaceholder("Enter the system prompt")
+					.setValue(this.plugin.settings.systemPrompt)
+					.onChange(async (value) => {
+						this.plugin.settings.systemPrompt = value;
 						await this.plugin.saveSettings();
 					})
 			);
