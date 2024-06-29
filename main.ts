@@ -1,3 +1,4 @@
+// Obsidian AI Chat as Markdown copyright 2024 by Charl P. Botha <cpbotha@vxlabs.com>
 import {
 	type EmbedCache,
 	type MarkdownView,
