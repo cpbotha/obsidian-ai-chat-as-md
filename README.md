@@ -13,7 +13,7 @@ As of 2024-06-29 this plugin is heavy WIP, but it should be usable.
 ## Demos
 
 - [Desktop first demo](https://youtu.be/_079Pi6UvgM?si=AJlnYs55XfYc4E5T)
-- [iPhone first demo](https://youtube.com/shorts/ZkXqeaQJAFw?si=ziJwIYICwVSmFHzC)
+- [iPhone first demo](https://youtu.be/ZkXqeaQJAFw?si=Bbj_Wnf8F_Sy714O)
 
 ## Tasks
 
