@@ -82,24 +82,26 @@ function imageToDataURL(imgSrc: string, maxEdge = 512) {
 }
 
 // find current cursor position, determine its heading path, then convert that path into messages
+// app needed for: metadataCache, vault
+// editor needed for: getCursor, getLine, lastLine, getRange, etc.
 async function convertToMessages(
+	markdownFile: TFile,
 	systemMessage: string,
 	app: App,
-	editor: Editor,
-	view: MarkdownView
+	editor: Editor
 ) {
-	const f = view.file;
-	if (!f) return null;
-	const cache = app.metadataCache.getFileCache(f);
+	const cache = app.metadataCache.getFileCache(markdownFile);
 	if (!cache) return null;
 	const headings = cache.headings || [];
 
-	// store indices of headings from the top-most to where the cursor is
+	// find heading containing the cursor, and then the path of containing headings up the tree
 	const headingPath = [];
 	let currentHeading = null;
 	for (let i = headings.length - 1; i >= 0; i--) {
 		const heading = headings[i];
 		if (currentHeading) {
+			// we've already found currentHeading, containing the cursor
+			// so here we're tracing the path from the cursor up to the topmost heading
 			if (
 				heading.position.start.line <
 					currentHeading.position.start.line &&
@@ -109,6 +111,7 @@ async function convertToMessages(
 				currentHeading = heading;
 			}
 		} else {
+			// we are still searching for the currentHeading (containing the cursor)
 			if (heading.position.start.line <= editor.getCursor().line) {
 				// ok we found the heading containing the cursor, start from here
 				headingPath.unshift(i);
@@ -218,7 +221,7 @@ async function convertToMessages(
 				if (part.type === "text" && part.text) {
 					contentParts.push(part as OpenAI.ChatCompletionContentPart);
 				} else if (part.type === "embed" && part.embed?.link) {
-					const f = this.app.vault.getFileByPath(part.embed.link);
+					const f = app.vault.getFileByPath(part.embed.link);
 					if (f) {
 						try {
 							// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
@@ -226,7 +229,7 @@ async function convertToMessages(
 							// openai gpt-4o
 							// we need either < 512x512 or < 2000x768 (low or high fidelity)
 							const { dataURL, x, y } = await imageToDataURL(
-								this.app.vault.getResourcePath(f),
+								app.vault.getResourcePath(f),
 								1568
 							);
 
@@ -296,11 +299,16 @@ export default class MyPlugin extends Plugin {
 			name: "Do the thing",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				const markdownFile = view.file;
+				if (!markdownFile) {
+					new Notice("No markdown file open");
+					return;
+				}
 				const mhe = await convertToMessages(
+					markdownFile,
 					this.settings.systemPrompt,
 					this.app,
-					editor,
-					view
+					editor
 				);
 				if (!mhe) {
 					new Notice("No headings found");
@@ -314,7 +322,7 @@ export default class MyPlugin extends Plugin {
 
 				replaceRangeMoveCursor(editor, aiHeading);
 
-				console.log(mhe.messages);
+				//console.log("DEBUG:", mhe.messages);
 				const stream = await this.getOpenAIStream(mhe.messages);
 				for await (const chunk of stream) {
 					const content = chunk.choices[0]?.delta?.content || "";
@@ -323,44 +331,6 @@ export default class MyPlugin extends Plugin {
 
 				const userHeading = `\n\n${"#".repeat(aiLevel + 1)} User\n`;
 				replaceRangeMoveCursor(editor, userHeading);
-			},
-		});
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: "open-sample-modal-simple",
-			name: "Open sample modal (simple)",
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: "sample-editor-command",
-			name: "Sample editor command",
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection("Sample Editor Command");
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: "open-sample-modal-complex",
-			name: "Open sample modal (complex)",
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
 			},
 		});
 
@@ -409,22 +379,6 @@ export default class MyPlugin extends Plugin {
 			messages: messages,
 			stream: true,
 		});
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText("Woah!");
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
 	}
 }
 
