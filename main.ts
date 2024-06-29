@@ -1,7 +1,6 @@
 import {
 	type EmbedCache,
-	MarkdownView,
-	Modal,
+	type MarkdownView,
 	Notice,
 	Plugin,
 	PluginSettingTab,
@@ -9,9 +8,7 @@ import {
 	type App,
 	type Editor,
 	type EditorPosition,
-	type HeadingCache,
 	type TFile,
-	arrayBufferToBase64,
 } from "obsidian";
 
 import OpenAI from "openai";
@@ -19,12 +16,18 @@ import OpenAI from "openai";
 interface AIChatAsMDSettings {
 	apiHost: string;
 	openAIAPIKey: string;
+	model: string;
 	systemPrompt: string;
 }
 
 const DEFAULT_SETTINGS: AIChatAsMDSettings = {
+	// openai: https://api.openai.com
+	// openrouter: https://openrouter.ai/api
 	apiHost: "https://api.openai.com",
 	openAIAPIKey: "sk-xxxx",
+	// openai: gpt-4o
+	// openrouter: anthropic/claude-3.5-sonnet
+	model: "gpt-4o",
 	systemPrompt: `You are an AI assistant, outputting into an Obsidian markdown document. You have access to and can interpret fenced codeblocks and MathJax notation. When responding:
 
 1. Use markdown formatting for text styling and organization, but avoid using # headings as your output could be streaming into a deeply nested part of the markdown document.
@@ -35,12 +38,6 @@ const DEFAULT_SETTINGS: AIChatAsMDSettings = {
 
 Your responses should be clear, concise, and tailored to the user's needs within the context of a note-taking and knowledge management environment.`,
 };
-
-function isImageFile(file: TFile): boolean {
-	// https://platform.openai.com/docs/guides/vision/what-type-of-files-can-i-upload
-	const imageExtensions = ["png", "jpg", "jpeg", "gif", "webp"];
-	return imageExtensions.includes(file.extension.toLowerCase());
-}
 
 // based on https://github.com/sissilab/obsidian-image-toolkit/issues/4#issuecomment-908898483
 function imageToDataURL(imgSrc: string, maxEdge = 512) {
@@ -335,7 +332,7 @@ export default class MyPlugin extends Plugin {
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.addSettingTab(new AIChatAsMDSettingsTab(this.app, this));
 	}
 
 	onunload() {}
@@ -372,17 +369,15 @@ export default class MyPlugin extends Plugin {
 	async getOpenAIStream(messages: OpenAI.ChatCompletionMessageParam[]) {
 		const openai = await this.getOpenAI();
 
-		// TODO: consider system prompt
 		return openai.chat.completions.create({
-			// TODO: setting
-			model: "anthropic/claude-3.5-sonnet",
+			model: this.settings.model,
 			messages: messages,
 			stream: true,
 		});
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
+class AIChatAsMDSettingsTab extends PluginSettingTab {
 	plugin: MyPlugin;
 
 	constructor(app: App, plugin: MyPlugin) {
@@ -397,7 +392,9 @@ class SampleSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("API host")
-			.setDesc("e.g. https://api.openai.com or https://openrouter.ai/api")
+			.setDesc(
+				"OpenAI-style API host, e.g. https://api.openai.com or https://openrouter.ai/api"
+			)
 			.addText((text) =>
 				text
 					.setPlaceholder(
@@ -411,14 +408,29 @@ class SampleSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Setting #1")
-			.setDesc("It's a secret")
+			.setName("API key")
+			.setDesc("Usually of the form sk-xxxx")
 			.addText((text) =>
 				text
 					.setPlaceholder("Enter your secret")
 					.setValue(this.plugin.settings.openAIAPIKey)
 					.onChange(async (value) => {
 						this.plugin.settings.openAIAPIKey = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Model name")
+			.setDesc(
+				"E.g. gpt-4o for OpenAI or anthropic/claude-3.5-sonnet for OpenRouter"
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("gpt-4o")
+					.setValue(this.plugin.settings.model)
+					.onChange(async (value) => {
+						this.plugin.settings.model = value;
 						await this.plugin.saveSettings();
 					})
 			);
