@@ -241,6 +241,9 @@ async function convertToMessages(
 
 							// console.log(dataURL);
 
+							console.log(
+								`Adding image "${part.embed.link}" at size ${x}x${y} to messages.`
+							);
 							contentParts.push({
 								type: "image_url",
 								image_url: {
