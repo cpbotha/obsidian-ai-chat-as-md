@@ -292,7 +292,7 @@ export default class MyPlugin extends Plugin {
 
 		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
 		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText("Status Bar Text");
+		statusBarItemEl.setText("AICM: AI Chat as MD loaded.");
 
 		this.addCommand({
 			id: "ai-chat-complete",
@@ -323,11 +323,19 @@ export default class MyPlugin extends Plugin {
 				replaceRangeMoveCursor(editor, aiHeading);
 
 				//console.log("DEBUG:", mhe.messages);
+				console.log(
+					`About to send ${mhe.messages.length} messages to AI.`
+				);
 				const stream = await this.getOpenAIStream(mhe.messages);
+				statusBarItemEl.setText("AICM streaming...");
 				for await (const chunk of stream) {
 					const content = chunk.choices[0]?.delta?.content || "";
 					replaceRangeMoveCursor(editor, content);
+					if (chunk.usage) {
+						console.log("OpenAI API usage:", chunk.usage);
+					}
 				}
+				statusBarItemEl.setText("AICM done.");
 
 				const userHeading = `\n\n${"#".repeat(aiLevel + 1)} User\n`;
 				replaceRangeMoveCursor(editor, userHeading);
