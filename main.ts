@@ -301,6 +301,7 @@ export default class MyPlugin extends Plugin {
 		this.addCommand({
 			id: "ai-chat-complete",
 			name: "Send current thread to AI",
+			icon: "bot-message-square",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
 				const markdownFile = view.file;
