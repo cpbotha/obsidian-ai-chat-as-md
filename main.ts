@@ -300,7 +300,7 @@ export default class MyPlugin extends Plugin {
 
 		this.addCommand({
 			id: "ai-chat-complete",
-			name: "Do the thing",
+			name: "Send current thread to AI",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
 				const markdownFile = view.file;
@@ -341,6 +341,7 @@ export default class MyPlugin extends Plugin {
 				}
 				statusBarItemEl.setText("AICM done.");
 
+				// BUG: on iPhone, this sometimes starts before the last 2 or 3 characters of AI message
 				const userHeading = `\n\n${"#".repeat(aiLevel + 1)} User\n`;
 				replaceRangeMoveCursor(editor, userHeading);
 			},
