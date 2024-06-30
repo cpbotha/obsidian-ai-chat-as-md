@@ -19,9 +19,13 @@ As of 2024-06-29 this plugin is heavy WIP, but it should be usable.
 
 - [X] Send embedded images to the model
 - [X] settings for default model, key, etc.
-- [ ] ignore `%` comment lines
-- [ ] Add used model as comment line to each AI response section
+- [ ] setup yarn PnP style packages
+
+### Maybe
+
 - [ ] enable per-document / yaml-header overrides of model, system prompt, etc.
+- [ ] ignore `%...%` comment blocks
+- [ ] Add used model as comment block (or some other mechanism) to each AI response section
 
 ## First time developing plugins?
 
