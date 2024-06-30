@@ -15,6 +15,10 @@ As of 2024-06-29 this plugin is heavy WIP, but it should be usable.
 - [Desktop first demo](https://youtu.be/_079Pi6UvgM?si=AJlnYs55XfYc4E5T)
 - [iPhone first demo](https://youtu.be/ZkXqeaQJAFw?si=Bbj_Wnf8F_Sy714O)
 
+## Manually installing the plugin
+
+- Copy over `main.js`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+
 ## Dev quickstart
 
 - Clone this repo.
@@ -34,7 +38,3 @@ As of 2024-06-29 this plugin is heavy WIP, but it should be usable.
 - [ ] enable per-document / yaml-header overrides of model, system prompt, etc.
 - [ ] ignore `%...%` comment blocks
 - [ ] Add used model as comment block (or some other mechanism) to each AI response section
-
-## Manually installing the plugin
-
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
