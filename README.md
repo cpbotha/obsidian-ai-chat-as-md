@@ -38,3 +38,13 @@ As of 2024-06-29 this plugin is heavy WIP, but it should be usable.
 - [ ] enable per-document / yaml-header overrides of model, system prompt, etc.
 - [ ] ignore `%...%` comment blocks
 - [ ] Add used model as comment block (or some other mechanism) to each AI response section
+
+## Dev publish new version
+
+See [Create a new release](https://docs.obsidian.md/Plugins/Releasing/Submit+your+plugin#Step+2+Create+a+release)
+
+- Update [manifest.json](./manifest.json) and [CHANGELOG.md](./manifest.json).
+- `yarn run build`
+
+- Create [new github release](https://github.com/cpbotha/obsidian-ai-chat-as-md/releases) and tag with e.g. 1.1.5
+  - Upload the freshly built `main.js` and updated `manifest.json` as binary attachments.
