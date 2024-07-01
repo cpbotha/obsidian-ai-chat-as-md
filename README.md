@@ -4,6 +4,8 @@ AI Chat as Markdown lets GPT-4 Omni / Claude 3.5 talk directly into your Obsidia
 
 It relies on nesting of headings, and thus you can have multiple conversations and even branching conversations in the same note.
 
+Please see [the documented branching conversation example](./docs/example_nesting.md) to understand how that works.
+
 The plugin supports images, so that you can talk about the images and diagrams that are embedded in your markdown, with models that support this, such os Omni and Claude 3.5.
 
 It can be configured via the Obsidian plugin settings to use any OpenAI-compatible API server.
