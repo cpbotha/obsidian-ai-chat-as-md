@@ -17,6 +17,12 @@ As of 2024-06-29 this plugin is heavy WIP, but it should be usable.
 - [Desktop first demo](https://youtu.be/_079Pi6UvgM?si=AJlnYs55XfYc4E5T)
 - [iPhone first demo](https://youtu.be/ZkXqeaQJAFw?si=Bbj_Wnf8F_Sy714O)
 
+## Quickstart
+
+- Install plugin via community plugins (once approved)
+- In Obsidian settings, under `AI Chat as Markdown` configure API Host (e.g. `https://api.openai.com/`), API key (`sk-xxxxx`), model name (e.g. `gpt-4o`)
+- In your Obsidian note, add example text `# My heading\nAre you there?`, position cursor inside, then in edit mode invoke via command palette `AI Chat as Markdown: Send current thread to AI`. Answer should appear under new sub-heading titled `## AI`.
+
 ## Manually installing the plugin
 
 - Copy over `main.js`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
