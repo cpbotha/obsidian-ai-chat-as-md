@@ -219,7 +219,7 @@ async function convertRangeToContentParts(
 // find current cursor position, determine its heading path, then convert that path into messages
 // app needed for: metadataCache, vault
 // editor needed for: getCursor, getLine, lastLine, getRange, etc.
-async function convertToMessages(
+async function convertCurrentThreadToMessages(
 	markdownFile: TFile,
 	systemMessage: string,
 	app: App,
@@ -367,7 +367,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 					new Notice("No markdown file open");
 					return;
 				}
-				const mhe = await convertToMessages(
+				const mhe = await convertCurrentThreadToMessages(
 					markdownFile,
 					this.settings.systemPrompt,
 					this.app,
