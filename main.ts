@@ -82,6 +82,15 @@ function imageToDataURL(imgSrc: string, maxEdge = 512) {
 	);
 }
 
+function initMessages(
+	systemMessage: string
+): OpenAI.ChatCompletionMessageParam[] {
+	const messages: OpenAI.ChatCompletionMessageParam[] = [
+		{ role: "system", content: systemMessage },
+	];
+	return messages;
+}
+
 async function convertRangeToContentParts(
 	startOffset: number,
 	endOffset: number,
@@ -92,7 +101,11 @@ async function convertRangeToContentParts(
 	// track end of previous embed+1, or start of the whole block, so we can add text before / between embeds
 	let currentStart = startOffset;
 
+	// intermediate list of text + embeds
 	const parts = [];
+
+	// experimentally: embedded external image links e.g. ![](https://some.url/image.jpg) do not get parsed as embeds
+	// docs at https://help.obsidian.md/Linking+notes+and+files/Embed+file do call this an embed though
 	let embed: EmbedCache | null = null;
 	for (embed of embeds) {
 		if (
@@ -142,16 +155,15 @@ async function convertRangeToContentParts(
 		if (part.type === "text" && part.text) {
 			contentParts.push(part as OpenAI.ChatCompletionContentPart);
 		} else if (part.type === "embed" && part.embed?.link) {
-			// FIXME: what if this is a link to external image resource?
-			const f = app.vault.getFileByPath(part.embed.link);
-			if (f) {
+			const embeddedFile = app.vault.getFileByPath(part.embed.link);
+			if (embeddedFile) {
 				try {
 					// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
 					// longest edge should be < 1568
 					// openai gpt-4o
 					// we need either < 512x512 or < 2000x768 (low or high fidelity)
 					const { dataURL, x, y } = await imageToDataURL(
-						app.vault.getResourcePath(f),
+						app.vault.getResourcePath(embeddedFile),
 						1568
 					);
 
@@ -173,7 +185,7 @@ async function convertRangeToContentParts(
 						},
 					});
 				} catch (e) {
-					console.error("Error copying image", f, e);
+					console.error("Error copying image", embeddedFile, e);
 				}
 			}
 		}
@@ -223,9 +235,8 @@ async function convertToMessages(
 
 	if (!currentHeading) return null;
 
-	const messages: OpenAI.ChatCompletionMessageParam[] = [
-		{ role: "system", content: systemMessage },
-	];
+	const messages = initMessages(systemMessage);
+
 	// we want to return the last rangeEnd, so that the calling code can move the cursor there
 	let rangeEnd: EditorPosition = { line: 0, ch: 0 };
 	let heading = null;
@@ -310,7 +321,7 @@ function replaceRangeMoveCursor(editor: Editor, text: string) {
 	});
 }
 
-export default class MyPlugin extends Plugin {
+export default class AIChatAsMDPlugin extends Plugin {
 	settings: AIChatAsMDSettings;
 
 	async onload() {
@@ -321,7 +332,7 @@ export default class MyPlugin extends Plugin {
 		statusBarItemEl.setText("AICM: AI Chat as MD loaded.");
 
 		this.addCommand({
-			id: "ai-chat-complete",
+			id: "ai-chat-complete-thread",
 			name: "Send current thread to AI",
 			icon: "bot-message-square",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
@@ -367,6 +378,56 @@ export default class MyPlugin extends Plugin {
 				// BUG: on iPhone, this sometimes starts before the last 2 or 3 characters of AI message
 				const userHeading = `\n\n${"#".repeat(aiLevel + 1)} User\n`;
 				replaceRangeMoveCursor(editor, userHeading);
+			},
+		});
+
+		this.addCommand({
+			id: "ai-chat-complete-selection",
+			name: "Send selection to AI and append response",
+			icon: "bot-message-square",
+			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				if (!editor.somethingSelected()) {
+					return;
+				}
+				const markdownFile = view.file;
+				if (!markdownFile) {
+					new Notice("No markdown file open");
+					return;
+				}
+
+				const cache = this.app.metadataCache.getFileCache(markdownFile);
+				if (!cache) return null;
+
+				const selStartOffset = editor.posToOffset(
+					editor.getCursor("from")
+				);
+				const selEndOffset = editor.posToOffset(editor.getCursor("to"));
+				const messages = initMessages(this.settings.systemPrompt);
+				messages.push({
+					role: "user",
+					content: await convertRangeToContentParts(
+						selStartOffset,
+						selEndOffset,
+						cache.embeds || [],
+						this.app,
+						editor
+					),
+				});
+
+				console.log(`About to send ${messages.length} messages to AI.`);
+				const stream = await this.getOpenAIStream(messages);
+				statusBarItemEl.setText("AICM streaming...");
+				replaceRangeMoveCursor(editor, "\n\n");
+				for await (const chunk of stream) {
+					const content = chunk.choices[0]?.delta?.content || "";
+					replaceRangeMoveCursor(editor, content);
+					if (chunk.usage) {
+						console.log("OpenAI API usage:", chunk.usage);
+					}
+				}
+				replaceRangeMoveCursor(editor, "\n");
+				statusBarItemEl.setText("AICM done.");
 			},
 		});
 
@@ -417,9 +478,9 @@ export default class MyPlugin extends Plugin {
 }
 
 class AIChatAsMDSettingsTab extends PluginSettingTab {
-	plugin: MyPlugin;
+	plugin: AIChatAsMDPlugin;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: AIChatAsMDPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
