@@ -426,10 +426,16 @@ export default class AIChatAsMDPlugin extends Plugin {
 				const cache = this.app.metadataCache.getFileCache(markdownFile);
 				if (!cache) return null;
 
-				const selStartOffset = editor.posToOffset(
-					editor.getCursor("from")
-				);
-				const selEndOffset = editor.posToOffset(editor.getCursor("to"));
+				// from..to could be flipped if user selected from the back to the front
+				// we make sure that it's from lowest to highest offset
+				// BTW: wow javascript, making me supply a compareFn to sort numbers seesh!
+				const [selStartOffset, selEndOffset] = [
+					editor.getCursor("from"),
+					editor.getCursor("to"),
+				]
+					.map((pos) => editor.posToOffset(pos))
+					.sort((a, b) => a - b);
+
 				const messages = initMessages(this.settings.systemPrompt);
 				messages.push({
 					role: "user",
@@ -449,6 +455,9 @@ export default class AIChatAsMDPlugin extends Plugin {
 
 				const stream = await this.getOpenAIStream(messages);
 				statusBarItemEl.setText("AICM streaming...");
+
+				// in case the user selected from back to front, we move the cursor to the end
+				editor.setCursor(editor.offsetToPos(selEndOffset));
 				replaceRangeMoveCursor(editor, "\n\n");
 				for await (const chunk of stream) {
 					const content = chunk.choices[0]?.delta?.content || "";
