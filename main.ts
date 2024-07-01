@@ -82,6 +82,106 @@ function imageToDataURL(imgSrc: string, maxEdge = 512) {
 	);
 }
 
+async function convertRangeToContentParts(
+	startOffset: number,
+	endOffset: number,
+	embeds: EmbedCache[],
+	app: App,
+	editor: Editor
+) {
+	// track end of previous embed+1, or start of the whole block, so we can add text before / between embeds
+	let currentStart = startOffset;
+
+	const parts = [];
+	let embed: EmbedCache | null = null;
+	for (embed of embeds) {
+		if (
+			embed.position.start.offset >= startOffset &&
+			embed.position.end.offset < endOffset
+		) {
+			if (embed.position.start.offset > currentStart) {
+				// this means there's text before the embed, let's add it
+				// EditorPosition has ch and line
+				// however, note that CM6 prefers offsets to the old CM5 line-ch pairs: https://codemirror.net/docs/migration/#positions
+				// fortunately, Obsidian's Editor abstraction offers posToOffset and offsetToPos
+				parts.push({
+					type: "text",
+					// AFAICS also from the CM6 docs on sliceDoc, getRange() excludes the end position
+					text: editor
+						.getRange(
+							editor.offsetToPos(currentStart),
+							editor.offsetToPos(embed.position.start.offset)
+						)
+						.trim(),
+				});
+			}
+			// TODO: check that the embed is an image / other processable type
+			parts.push({
+				type: "embed",
+				embed,
+			});
+			currentStart = embed.position.end.offset + 1;
+		}
+	}
+
+	// take care of last bit of text
+	if (endOffset > currentStart) {
+		parts.push({
+			type: "text",
+			text: editor
+				.getRange(
+					editor.offsetToPos(currentStart),
+					editor.offsetToPos(endOffset)
+				)
+				.trim(),
+		});
+	}
+
+	const contentParts: Array<OpenAI.ChatCompletionContentPart> = [];
+	for (const part of parts) {
+		if (part.type === "text" && part.text) {
+			contentParts.push(part as OpenAI.ChatCompletionContentPart);
+		} else if (part.type === "embed" && part.embed?.link) {
+			// FIXME: what if this is a link to external image resource?
+			const f = app.vault.getFileByPath(part.embed.link);
+			if (f) {
+				try {
+					// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
+					// longest edge should be < 1568
+					// openai gpt-4o
+					// we need either < 512x512 or < 2000x768 (low or high fidelity)
+					const { dataURL, x, y } = await imageToDataURL(
+						app.vault.getResourcePath(f),
+						1568
+					);
+
+					// DEBUG: show image in the console -- working on 2024-06-27
+					// console.log(
+					// 	"%c ",
+					// 	`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
+					// );
+
+					// console.log(dataURL);
+
+					console.log(
+						`Adding image "${part.embed.link}" at size ${x}x${y} to messages.`
+					);
+					contentParts.push({
+						type: "image_url",
+						image_url: {
+							url: dataURL,
+						},
+					});
+				} catch (e) {
+					console.error("Error copying image", f, e);
+				}
+			}
+		}
+	}
+
+	return contentParts;
+}
+
 // find current cursor position, determine its heading path, then convert that path into messages
 // app needed for: metadataCache, vault
 // editor needed for: getCursor, getLine, lastLine, getRange, etc.
@@ -132,6 +232,7 @@ async function convertToMessages(
 	// we want to find embeds in the range
 	let rangeEndOffset = -1;
 	for (const i of headingPath) {
+		// determine current heading to next heading / end of file block
 		heading = headings[i];
 		const nextHeading = headings[i + 1];
 		if (nextHeading) {
@@ -165,98 +266,19 @@ async function convertToMessages(
 			);
 			messages.push({ role: role, content: m });
 		} else {
-			// user message, so we do multi-part
-			let currentStart = heading.position.end.offset + 1;
-
-			const parts = [];
+			// this is a user message, so we do multi-part / ContentPart[]
 
 			const embeds = cache.embeds || [];
+			const startOffset = heading.position.end.offset + 1;
+			const endOffset = rangeEndOffset;
 
-			let embed: EmbedCache | null = null;
-			for (embed of embeds) {
-				if (
-					embed.position.start.offset > heading.position.end.offset &&
-					embed.position.end.offset < rangeEndOffset
-				) {
-					if (embed.position.start.offset > currentStart) {
-						// this means there's text before the embed, let's add it
-						// EditorPosition has ch and line
-						// however, note that CM6 prefers offsets to the old CM5 line-ch pairs: https://codemirror.net/docs/migration/#positions
-						// fortunately, Obsidian's Editor abstraction offers posToOffset and offsetToPos
-						parts.push({
-							type: "text",
-							text: editor
-								.getRange(
-									editor.offsetToPos(currentStart),
-									editor.offsetToPos(
-										embed.position.start.offset
-									)
-								)
-								.trim(),
-						});
-					}
-					// TODO: check that the embed is an image / other processable type
-					parts.push({
-						type: "embed",
-						embed,
-					});
-					currentStart = embed.position.end.offset;
-				}
-			}
-
-			// take care of last bit of text
-			if (rangeEndOffset > currentStart) {
-				parts.push({
-					type: "text",
-					text: editor
-						.getRange(
-							editor.offsetToPos(currentStart),
-							editor.offsetToPos(rangeEndOffset)
-						)
-						.trim(),
-				});
-			}
-
-			const contentParts: Array<OpenAI.ChatCompletionContentPart> = [];
-			for (const part of parts) {
-				if (part.type === "text" && part.text) {
-					contentParts.push(part as OpenAI.ChatCompletionContentPart);
-				} else if (part.type === "embed" && part.embed?.link) {
-					const f = app.vault.getFileByPath(part.embed.link);
-					if (f) {
-						try {
-							// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
-							// longest edge should be < 1568
-							// openai gpt-4o
-							// we need either < 512x512 or < 2000x768 (low or high fidelity)
-							const { dataURL, x, y } = await imageToDataURL(
-								app.vault.getResourcePath(f),
-								1568
-							);
-
-							// DEBUG: show image in the console -- working on 2024-06-27
-							// console.log(
-							// 	"%c ",
-							// 	`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
-							// );
-
-							// console.log(dataURL);
-
-							console.log(
-								`Adding image "${part.embed.link}" at size ${x}x${y} to messages.`
-							);
-							contentParts.push({
-								type: "image_url",
-								image_url: {
-									url: dataURL,
-								},
-							});
-						} catch (e) {
-							console.error("Error copying image", f, e);
-						}
-					}
-				}
-			}
+			const contentParts = await convertRangeToContentParts(
+				startOffset,
+				endOffset,
+				embeds,
+				app,
+				editor
+			);
 
 			messages.push({
 				role: role,
