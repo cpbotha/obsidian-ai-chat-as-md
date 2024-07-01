@@ -27,6 +27,11 @@ As of 2024-06-29 this plugin is heavy WIP, but it should be usable.
 
 - Copy over `main.js`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
 
+## Inspired by
+
+- [gptel LLM client for Emacs](https://github.com/karthink/gptel), and especially its branching context feature
+- [ChatGPT-MD Obsidian plugin](https://github.com/bramses/chatgpt-md), but I preferred to use the official OpenAI nodejs library and to use the gptel-style nested heading approach
+
 ## Dev quickstart
 
 - Clone this repo.
