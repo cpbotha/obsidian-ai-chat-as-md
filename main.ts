@@ -105,6 +105,16 @@ async function convertRangeToContentParts(
 	vault: Vault,
 	debug: boolean
 ) {
+	if (debug) {
+		console.log(
+			"convertRangeToContentParts()",
+			startOffset,
+			endOffset,
+			"EMBEDS:",
+			embeds
+		);
+	}
+
 	// track end of previous embed+1, or start of the whole block, so we can add text before / between embeds
 	let currentStart = startOffset;
 
@@ -114,10 +124,11 @@ async function convertRangeToContentParts(
 	// experimentally: embedded external image links e.g. ![](https://some.url/image.jpg) do not get parsed as embeds
 	// docs at https://help.obsidian.md/Linking+notes+and+files/Embed+file do call this an embed though
 	let embed: EmbedCache | null = null;
+
 	for (embed of embeds) {
 		if (
 			embed.position.start.offset >= startOffset &&
-			embed.position.end.offset < endOffset
+			embed.position.end.offset <= endOffset
 		) {
 			if (embed.position.start.offset > currentStart) {
 				// this means there's text before the embed, let's add it
@@ -350,6 +361,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 			icon: "bot-message-square",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				// await view.save();
 				const markdownFile = view.file;
 				if (!markdownFile) {
 					new Notice("No markdown file open");
@@ -410,6 +422,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 					return;
 				}
 
+				// await view.save();
 				const cache = this.app.metadataCache.getFileCache(markdownFile);
 				if (!cache) return null;
 
