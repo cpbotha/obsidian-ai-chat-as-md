@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New command to add AI response to selection
 - Documentation about branching conversation
+- Configurable debug mode to get super verbose console.log output
 
 ### Fixed
 

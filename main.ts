@@ -10,6 +10,7 @@ import {
 	type Editor,
 	type EditorPosition,
 	type TFile,
+	type Vault,
 } from "obsidian";
 
 import OpenAI from "openai";
@@ -19,6 +20,7 @@ interface AIChatAsMDSettings {
 	openAIAPIKey: string;
 	model: string;
 	systemPrompt: string;
+	debug: boolean;
 }
 
 const DEFAULT_SETTINGS: AIChatAsMDSettings = {
@@ -41,10 +43,13 @@ const DEFAULT_SETTINGS: AIChatAsMDSettings = {
 8. Provide direct answers without preamble or excessive context-setting.
 
 Maintain a precise, informative tone. Focus on delivering maximum relevant information in minimum space.`,
+	debug: false,
 };
 
+/// Convert image resource URL to data URL
+/// If the passed resource URL can't be drawn to a canvas, an exception will be raised
 // based on https://github.com/sissilab/obsidian-image-toolkit/issues/4#issuecomment-908898483
-function imageToDataURL(imgSrc: string, maxEdge = 512) {
+function imageToDataURL(imgSrc: string, maxEdge = 512, debug = false) {
 	return new Promise<{ dataURL: string; x: number; y: number }>(
 		(resolve, reject) => {
 			const image = new Image();
@@ -57,7 +62,8 @@ function imageToDataURL(imgSrc: string, maxEdge = 512) {
 					for (let i = 0; i < 2; i++) {
 						dims[i] = Math.round(dims[i] * downscaleFactor);
 					}
-					console.log(`resizing to ${dims[0]} x ${dims[1]}`);
+					if (debug)
+						console.log(`resizing to ${dims[0]} x ${dims[1]}`);
 				}
 				const canvas = document.createElement("canvas");
 				canvas.width = dims[0];
@@ -95,8 +101,9 @@ async function convertRangeToContentParts(
 	startOffset: number,
 	endOffset: number,
 	embeds: EmbedCache[],
-	app: App,
-	editor: Editor
+	editor: Editor,
+	vault: Vault,
+	debug: boolean
 ) {
 	// track end of previous embed+1, or start of the whole block, so we can add text before / between embeds
 	let currentStart = startOffset;
@@ -155,7 +162,7 @@ async function convertRangeToContentParts(
 		if (part.type === "text" && part.text) {
 			contentParts.push(part as OpenAI.ChatCompletionContentPart);
 		} else if (part.type === "embed" && part.embed?.link) {
-			const embeddedFile = app.vault.getFileByPath(part.embed.link);
+			const embeddedFile = vault.getFileByPath(part.embed.link);
 			if (embeddedFile) {
 				try {
 					// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
@@ -163,21 +170,25 @@ async function convertRangeToContentParts(
 					// openai gpt-4o
 					// we need either < 512x512 or < 2000x768 (low or high fidelity)
 					const { dataURL, x, y } = await imageToDataURL(
-						app.vault.getResourcePath(embeddedFile),
-						1568
+						vault.getResourcePath(embeddedFile),
+						1568,
+						debug
 					);
 
 					// DEBUG: show image in the console -- working on 2024-06-27
-					// console.log(
-					// 	"%c ",
-					// 	`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
-					// );
+					if (debug) {
+						console.log(
+							"%c ",
+							`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
+						);
 
-					// console.log(dataURL);
+						console.log(dataURL);
 
-					console.log(
-						`Adding image "${part.embed.link}" at size ${x}x${y} to messages.`
-					);
+						console.log(
+							`Adding image "${part.embed.link}" at size ${x}x${y} to messages.`
+						);
+					}
+
 					contentParts.push({
 						type: "image_url",
 						image_url: {
@@ -201,7 +212,8 @@ async function convertToMessages(
 	markdownFile: TFile,
 	systemMessage: string,
 	app: App,
-	editor: Editor
+	editor: Editor,
+	debug = false
 ) {
 	const cache = app.metadataCache.getFileCache(markdownFile);
 	if (!cache) return null;
@@ -287,8 +299,9 @@ async function convertToMessages(
 				startOffset,
 				endOffset,
 				embeds,
-				app,
-				editor
+				editor,
+				app.vault,
+				debug
 			);
 
 			messages.push({
@@ -346,7 +359,8 @@ export default class AIChatAsMDPlugin extends Plugin {
 					markdownFile,
 					this.settings.systemPrompt,
 					this.app,
-					editor
+					editor,
+					this.settings.debug
 				);
 				if (!mhe) {
 					new Notice("No headings found");
@@ -360,10 +374,10 @@ export default class AIChatAsMDPlugin extends Plugin {
 
 				replaceRangeMoveCursor(editor, aiHeading);
 
-				//console.log("DEBUG:", mhe.messages);
-				console.log(
-					`About to send ${mhe.messages.length} messages to AI.`
-				);
+				if (this.settings.debug) {
+					console.log("About to send to AI:", mhe.messages);
+				}
+
 				const stream = await this.getOpenAIStream(mhe.messages);
 				statusBarItemEl.setText("AICM streaming...");
 				for await (const chunk of stream) {
@@ -410,12 +424,16 @@ export default class AIChatAsMDPlugin extends Plugin {
 						selStartOffset,
 						selEndOffset,
 						cache.embeds || [],
-						this.app,
-						editor
+						editor,
+						this.app.vault,
+						this.settings.debug
 					),
 				});
 
-				console.log(`About to send ${messages.length} messages to AI.`);
+				if (this.settings.debug) {
+					console.log("About to send to AI:", messages);
+				}
+
 				const stream = await this.getOpenAIStream(messages);
 				statusBarItemEl.setText("AICM streaming...");
 				replaceRangeMoveCursor(editor, "\n\n");
@@ -543,6 +561,18 @@ class AIChatAsMDSettingsTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.systemPrompt)
 					.onChange(async (value) => {
 						this.plugin.settings.systemPrompt = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Debug mode")
+			.setDesc("Debug output in developer console")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.debug)
+					.onChange(async (value) => {
+						this.plugin.settings.debug = value;
 						await this.plugin.saveSettings();
 					})
 			);
