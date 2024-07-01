@@ -32,6 +32,8 @@ As of 2024-06-29 this plugin is heavy WIP, but it should be usable.
 - [X] Send embedded images to the model
 - [X] settings for default model, key, etc.
 - [X] setup yarn PnP style packages
+- [ ] Add README section explaining the nesting to conversation algorithm
+- [ ] Make debug mode configurable, then feature-flag logging behind that
 
 ### Maybe
 
