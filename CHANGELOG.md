@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2024-07-01
+
 ### Added
 
-- New command to add AI response to selection
+- New command to send whole selection to AI, ignoring heading hierarchy, and then append response right after
 - Documentation about branching conversation
 - Configurable debug mode to get super verbose console.log output
 
