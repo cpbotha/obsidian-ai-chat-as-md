@@ -4,7 +4,6 @@
 	"version": "1.1.0",
 	"minAppVersion": "1.6.0",
 	"description": "Multiple branching AI conversations as Markdown hierarchy",
-	"repo": "cpbotha/obsidian-ai-chat-as-md",
 	"author": "Charl P. Botha",
 	"authorUrl": "https://charlbotha.com/",
 	"isDesktopOnly": false
