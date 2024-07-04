@@ -352,8 +352,8 @@ export default class AIChatAsMDPlugin extends Plugin {
 		await this.loadSettings();
 
 		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText("AICM: AI Chat as MD loaded.");
+		// const statusBarItemEl = this.addStatusBarItem();
+		// statusBarItemEl.setText("AICM loaded");
 
 		this.addCommand({
 			id: "complete-thread",
@@ -391,7 +391,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 				}
 
 				const stream = await this.getOpenAIStream(mhe.messages);
-				statusBarItemEl.setText("AICM streaming...");
+				// statusBarItemEl.setText("AICM streaming...");
 				for await (const chunk of stream) {
 					const content = chunk.choices[0]?.delta?.content || "";
 					replaceRangeMoveCursor(editor, content);
@@ -399,7 +399,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 						console.log("OpenAI API usage:", chunk.usage);
 					}
 				}
-				statusBarItemEl.setText("AICM done.");
+				//statusBarItemEl.setText("AICM done.");
 
 				// BUG: on iPhone, this sometimes starts before the last 2 or 3 characters of AI message
 				const userHeading = `\n\n${"#".repeat(aiLevel + 1)} User\n`;
@@ -413,61 +413,17 @@ export default class AIChatAsMDPlugin extends Plugin {
 			icon: "bot-message-square",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
-				if (!editor.somethingSelected()) {
-					return;
-				}
-				const markdownFile = view.file;
-				if (!markdownFile) {
-					new Notice("No markdown file open");
-					return;
-				}
+				await this.completeSelection(editor, view);
+			},
+		});
 
-				// await view.save();
-				const cache = this.app.metadataCache.getFileCache(markdownFile);
-				if (!cache) return null;
-
-				// from..to could be flipped if user selected from the back to the front
-				// we make sure that it's from lowest to highest offset
-				// BTW: wow javascript, making me supply a compareFn to sort numbers seesh!
-				const [selStartOffset, selEndOffset] = [
-					editor.getCursor("from"),
-					editor.getCursor("to"),
-				]
-					.map((pos) => editor.posToOffset(pos))
-					.sort((a, b) => a - b);
-
-				const messages = initMessages(this.settings.systemPrompt);
-				messages.push({
-					role: "user",
-					content: await convertRangeToContentParts(
-						selStartOffset,
-						selEndOffset,
-						cache.embeds || [],
-						editor,
-						this.app.vault,
-						this.settings.debug
-					),
-				});
-
-				if (this.settings.debug) {
-					console.log("About to send to AI:", messages);
-				}
-
-				const stream = await this.getOpenAIStream(messages);
-				statusBarItemEl.setText("AICM streaming...");
-
-				// in case the user selected from back to front, we move the cursor to the end
-				editor.setCursor(editor.offsetToPos(selEndOffset));
-				replaceRangeMoveCursor(editor, "\n\n");
-				for await (const chunk of stream) {
-					const content = chunk.choices[0]?.delta?.content || "";
-					replaceRangeMoveCursor(editor, content);
-					if (chunk.usage) {
-						console.log("OpenAI API usage:", chunk.usage);
-					}
-				}
-				replaceRangeMoveCursor(editor, "\n");
-				statusBarItemEl.setText("AICM done.");
+		this.addCommand({
+			id: "complete-selection-and-replace",
+			name: "Send selected text to AI and REPLACE it with the response",
+			icon: "bot-message-square",
+			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				await this.completeSelection(editor, view, "replace");
 			},
 		});
 
@@ -514,6 +470,73 @@ export default class AIChatAsMDPlugin extends Plugin {
 			messages: messages,
 			stream: true,
 		});
+	}
+
+	async completeSelection(
+		editor: Editor,
+		view: MarkdownView,
+		mode: "replace" | "append" = "append"
+	) {
+		if (!editor.somethingSelected()) {
+			return;
+		}
+		const markdownFile = view.file;
+		if (!markdownFile) {
+			new Notice("No markdown file open");
+			return;
+		}
+
+		// await view.save();
+		const cache = this.app.metadataCache.getFileCache(markdownFile);
+		if (!cache) return null;
+
+		// from..to could be flipped if user selected from the back to the front
+		// we make sure that it's from lowest to highest offset
+		// BTW: wow javascript, making me supply a compareFn to sort numbers seesh!
+		const [selStartOffset, selEndOffset] = [
+			editor.getCursor("from"),
+			editor.getCursor("to"),
+		]
+			.map((pos) => editor.posToOffset(pos))
+			.sort((a, b) => a - b);
+
+		const messages = initMessages(this.settings.systemPrompt);
+		messages.push({
+			role: "user",
+			content: await convertRangeToContentParts(
+				selStartOffset,
+				selEndOffset,
+				cache.embeds || [],
+				editor,
+				this.app.vault,
+				this.settings.debug
+			),
+		});
+
+		if (this.settings.debug) {
+			console.log("About to send to AI:", messages);
+		}
+
+		const stream = await this.getOpenAIStream(messages);
+		//statusBarItemEl.setText("AICM streaming...");
+
+		if (mode === "append") {
+			// in case the user selected from back to front, we move the cursor to the end
+			editor.setCursor(editor.offsetToPos(selEndOffset));
+			replaceRangeMoveCursor(editor, "\n\n");
+		} else {
+			editor.replaceSelection("");
+		}
+
+		for await (const chunk of stream) {
+			const content = chunk.choices[0]?.delta?.content || "";
+			replaceRangeMoveCursor(editor, content);
+			if (chunk.usage) {
+				console.log("OpenAI API usage:", chunk.usage);
+			}
+		}
+		replaceRangeMoveCursor(editor, "\n");
+		//statusBarItemEl.setText("AICM done.");
 	}
 }
 
