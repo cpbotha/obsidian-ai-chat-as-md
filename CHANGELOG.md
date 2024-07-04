@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2024-07-04
+
 ### Added
 
 - New command to send selection to AI and then replace that selection with the response
+
+### Fixed
+
+- Review comments from [Obsidian Releases community review](https://github.com/obsidianmd/obsidian-releases/pull/3802#issuecomment-2209357530)
 
 ### Removed
 
