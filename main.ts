@@ -27,7 +27,7 @@ const DEFAULT_SETTINGS: AIChatAsMDSettings = {
 	// openai: https://api.openai.com
 	// openrouter: https://openrouter.ai/api
 	apiHost: "https://api.openai.com",
-	openAIAPIKey: "sk-xxxx",
+	openAIAPIKey: "",
 	// openai: gpt-4o
 	// openrouter: anthropic/claude-3.5-sonnet
 	model: "gpt-4o",
@@ -356,7 +356,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 		statusBarItemEl.setText("AICM: AI Chat as MD loaded.");
 
 		this.addCommand({
-			id: "ai-chat-complete-thread",
+			id: "complete-thread",
 			name: "Send current thread to AI",
 			icon: "bot-message-square",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
@@ -408,8 +408,8 @@ export default class AIChatAsMDPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "ai-chat-complete-selection",
-			name: "Send selection to AI and append response",
+			id: "complete-selection",
+			name: "Send selected text to AI and append the response",
 			icon: "bot-message-square",
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
@@ -576,7 +576,7 @@ class AIChatAsMDSettingsTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("System Prompt")
+			.setName("System prompt")
 			.addTextArea((textArea) =>
 				textArea
 					.setPlaceholder("Enter the system prompt")
