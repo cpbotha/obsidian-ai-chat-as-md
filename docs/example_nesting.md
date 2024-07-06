@@ -4,7 +4,7 @@ This example shows how nested headings represent branching conversations. Please
 
 - In short, the plugin will always trace upwards, in a heading / hierarchy sense, starting from the heading containing the cursor up to the highest level containing heading.
 - Ensure that your conversation's starting message is H1 (single `#`). It can be `##` but then there should be nothing above that.
-- Headings starting with "AI" or "Assitant" (case insensitive) are tagged as assistant messages, _any_ other headings as user messages.
+- Headings starting with "AI" or "Assistant" (case insensitive) are tagged as assistant messages, _any_ other headings as user messages.
 - Embedded images (not links!) will be correctly base64 encoded and submitted together with text to the OpenAI-style API for multi-modal understanding.
 
 # First message: joke request
