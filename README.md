@@ -37,7 +37,7 @@ It can be configured via the Obsidian plugin settings to use any OpenAI-compatib
 
 Here we've added a special "Memories and facts" section to the system prompt markdown file:
 
-![Screenshot showing file as system prompt with memories](./screenshots/obsidian-ai-chat-as-md-file-as-system-prompt.png | width=800)
+![Screenshot showing file as system prompt with memories](./screenshots/obsidian-ai-chat-as-md-file-as-system-prompt.png)
 
 ## Dev quickstart
 
