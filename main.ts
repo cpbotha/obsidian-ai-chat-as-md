@@ -21,6 +21,7 @@ interface AIChatAsMDSettings {
 	openAIAPIKey: string;
 	model: string;
 	systemPrompt: string;
+	systemPromptFile: string;
 	debug: boolean;
 }
 
@@ -44,6 +45,7 @@ const DEFAULT_SETTINGS: AIChatAsMDSettings = {
 8. Provide direct answers without preamble or excessive context-setting.
 
 Maintain a precise, informative tone. Focus on delivering maximum relevant information in minimum space.`,
+	systemPromptFile: "",
 	debug: false,
 };
 
@@ -368,9 +370,15 @@ export default class AIChatAsMDPlugin extends Plugin {
 					new Notice("No markdown file open");
 					return;
 				}
+
+				const systemPrompt = await this.getSystemPrompt();
+				if (!systemPrompt) {
+					return;
+				}
+
 				const mhe = await convertCurrentThreadToMessages(
 					markdownFile,
-					this.settings.systemPrompt,
+					systemPrompt,
 					this.app,
 					editor,
 					this.settings.debug
@@ -473,6 +481,26 @@ export default class AIChatAsMDPlugin extends Plugin {
 		});
 	}
 
+	async getSystemPrompt() {
+		if (this.settings.systemPromptFile) {
+			const systemPromptFile = this.app.vault.getFileByPath(
+				this.settings.systemPromptFile
+			);
+			if (!systemPromptFile) {
+				new Notice(
+					`AI Chat as MD could not read system prompt file "${this.settings.systemPromptFile}". Please fix its path in the plugin settings.`
+				);
+				return null;
+			}
+			const systemPrompt = await this.app.vault.cachedRead(
+				systemPromptFile
+			);
+			return systemPrompt;
+		}
+
+		return this.settings.systemPrompt;
+	}
+
 	async completeSelection(
 		editor: Editor,
 		view: MarkdownView,
@@ -501,7 +529,11 @@ export default class AIChatAsMDPlugin extends Plugin {
 			.map((pos) => editor.posToOffset(pos))
 			.sort((a, b) => a - b);
 
-		const messages = initMessages(this.settings.systemPrompt);
+		const systemPrompt = await this.getSystemPrompt();
+		if (!systemPrompt) {
+			return;
+		}
+		const messages = initMessages(systemPrompt);
 		messages.push({
 			role: "user",
 			content: await convertRangeToContentParts(
@@ -600,7 +632,7 @@ class AIChatAsMDSettingsTab extends PluginSettingTab {
 			);
 
 		let systemPromptTextArea: TextAreaComponent;
-		new Setting(containerEl)
+		const systemPromptSetting = new Setting(containerEl)
 			.setName("System prompt")
 			.addTextArea((textArea) => {
 				systemPromptTextArea = textArea;
@@ -624,6 +656,28 @@ class AIChatAsMDSettingsTab extends PluginSettingTab {
 						// so here we help it
 						systemPromptTextArea.onChanged();
 					});
+			});
+
+		new Setting(containerEl).setName("Advanced").setHeading();
+
+		// this.app.vault.getMarkdownFiles()
+		// the path in each of these files is relative to the vault, which is exactly what I want for this.app.vault.getFileByPath()
+		new Setting(containerEl)
+			.setName("Use (markdown) file as system prompt")
+			.setDesc(
+				"Enter the path, relative to your vault, of any file that the plugin should use as the system prompt, " +
+					"instead of the text above. " +
+					"Examples: `sysprompt-swdev.md`, `top-folder/system prompt 1.md`"
+			)
+			.addText((text) => {
+				text.setValue(this.plugin.settings.systemPromptFile).onChange(
+					async (value) => {
+						this.plugin.settings.systemPromptFile = value.trim();
+						await this.plugin.saveSettings();
+
+						//systemPromptSetting.setDisabled(value !== "");
+					}
+				);
 			});
 
 		new Setting(containerEl)
