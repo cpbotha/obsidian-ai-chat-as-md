@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2024-07-07
+
 ### Added
 
+- Add advanced option to use a markdown file in your vault as the system prompt. Besides the default instructions, you can for example add a list of memories.
 - Reset system prompt to default
 
 ### Fixed
