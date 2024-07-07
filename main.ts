@@ -563,7 +563,7 @@ class AIChatAsMDSettingsTab extends PluginSettingTab {
 					.setPlaceholder(
 						"Enter the API host, e.g. https://api.openai.com"
 					)
-					.setValue("https://openrouter.ai/api")
+					.setValue(this.plugin.settings.apiHost)
 					.onChange(async (value) => {
 						this.plugin.settings.apiHost = value;
 						await this.plugin.saveSettings();
