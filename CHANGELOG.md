@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Reset system prompt to default
+
+### Fixed
+
+- Bug in configuring the API host, could not set anything but openrouter, sorry!
+
 ### Changed
 
 - Updates to the README
