@@ -15,6 +15,14 @@ It can be configured via the Obsidian plugin settings to use any OpenAI-compatib
 - [Desktop first demo](https://youtu.be/_079Pi6UvgM?si=AJlnYs55XfYc4E5T)
 - [iPhone first demo](https://youtu.be/ZkXqeaQJAFw?si=Bbj_Wnf8F_Sy714O)
 
+## Screenshots
+
+### Use markdown files as system prompts
+
+Here we've added a special "Memories and facts" section to the system prompt markdown file:
+
+![Screenshot showing file as system prompt with memories](./screenshots/obsidian-ai-chat-as-md-file-as-system-prompt.png)
+
 ## Quickstart
 
 - Install plugin via community plugins (once approved)
@@ -30,14 +38,6 @@ It can be configured via the Obsidian plugin settings to use any OpenAI-compatib
 
 - [gptel LLM client for Emacs](https://github.com/karthink/gptel), and especially its branching context feature
 - [ChatGPT-MD Obsidian plugin](https://github.com/bramses/chatgpt-md), but I preferred to use the official OpenAI nodejs library and to use the gptel-style nested heading approach
-
-## Screenshots
-
-### Use markdown files as system prompts
-
-Here we've added a special "Memories and facts" section to the system prompt markdown file:
-
-![Screenshot showing file as system prompt with memories](./screenshots/obsidian-ai-chat-as-md-file-as-system-prompt.png)
 
 ## Dev quickstart
 
