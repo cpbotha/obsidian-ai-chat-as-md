@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2024-07-07
+
+### Fixed
+
+- Bug fix release to get new system prompt file setting actually in
+
 ## [1.3.0] - 2024-07-07
 
 ### Added
