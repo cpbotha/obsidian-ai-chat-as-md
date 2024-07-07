@@ -49,6 +49,7 @@ It can be configured via the Obsidian plugin settings to use any OpenAI-compatib
 
 ### Maybe
 
+- [ ] implement user-friendly file selector for the system prompt file setting
 - [ ] enable per-document / yaml-header overrides of model, system prompt, etc.
 - [ ] ignore `%...%` comment blocks
 - [ ] Add used model as comment block (or some other mechanism) to each AI response section
