@@ -1,15 +1,16 @@
 // Obsidian AI Chat as Markdown copyright 2024 by Charl P. Botha <cpbotha@vxlabs.com>
 import {
+	type App,
+	type Editor,
+	type EditorPosition,
 	type EmbedCache,
 	type MarkdownView,
 	Notice,
 	Plugin,
 	PluginSettingTab,
 	Setting,
-	type App,
-	type Editor,
-	type EditorPosition,
 	type TFile,
+	type TextAreaComponent,
 	type Vault,
 } from "obsidian";
 
@@ -598,17 +599,32 @@ class AIChatAsMDSettingsTab extends PluginSettingTab {
 					})
 			);
 
+		let systemPromptTextArea: TextAreaComponent;
 		new Setting(containerEl)
 			.setName("System prompt")
-			.addTextArea((textArea) =>
-				textArea
+			.addTextArea((textArea) => {
+				systemPromptTextArea = textArea;
+				return textArea
 					.setPlaceholder("Enter the system prompt")
 					.setValue(this.plugin.settings.systemPrompt)
 					.onChange(async (value) => {
 						this.plugin.settings.systemPrompt = value;
 						await this.plugin.saveSettings();
-					})
-			);
+					});
+			})
+			.addExtraButton((button) => {
+				button
+					.setIcon("lucide-rotate-ccw")
+					.setTooltip("Reset to default")
+					.onClick(() => {
+						systemPromptTextArea.setValue(
+							DEFAULT_SETTINGS.systemPrompt
+						);
+						// setValue() above does not trigger the onChange() hanndler
+						// so here we help it
+						systemPromptTextArea.onChanged();
+					});
+			});
 
 		new Setting(containerEl)
 			.setName("Debug mode")
