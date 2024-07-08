@@ -23,6 +23,8 @@ Here we've added a special "Memories and facts" section to the system prompt mar
 
 ![Screenshot showing file as system prompt with memories](./screenshots/obsidian-ai-chat-as-md-file-as-system-prompt.png)
 
+Please see the [example system prompt markdown file](./docs/example_system_prompt.md).
+
 ## Quickstart
 
 - Install plugin via community plugins (once approved)
