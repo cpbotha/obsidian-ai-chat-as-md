@@ -27,7 +27,7 @@ Please see the [example system prompt markdown file](./docs/example_system_promp
 
 ## Quickstart
 
-- Install plugin via community plugins (once approved)
+- [Install plugin via community plugins](https://obsidian.md/plugins?id=ai-chat-as-md)
 - In Obsidian settings, under `AI Chat as Markdown` configure API Host (e.g. `https://api.openai.com/`), API key (`sk-xxxxx`), model name (e.g. `gpt-4o`)
 - In your Obsidian note, add example text `# My heading\nAre you there?`, position cursor inside, then, **in edit mode**, invoke via command palette `AI Chat as Markdown: Send current thread to AI`. Answer should appear under new sub-heading titled `## AI`.
   - You could also just select some text, and then invoke `AI Chat as Markdown: Send selected text to AI and append the response`.
