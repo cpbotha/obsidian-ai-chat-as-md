@@ -481,6 +481,9 @@ export default class AIChatAsMDPlugin extends Plugin {
 		const cache = this.app.metadataCache.getFileCache(markdownFile);
 		const model =
 			cache?.frontmatter?.["aicmd-model"] ?? this.settings.model;
+		if (this.settings.debug) {
+			console.log(`Using model ${model} for "${markdownFile.path}"`);
+		}
 		return model;
 	}
 
