@@ -408,16 +408,23 @@ export default class AIChatAsMDPlugin extends Plugin {
 					console.log("About to send to AI:", mhe.messages);
 				}
 
-				const stream = await this.getOpenAIStream(mhe.messages, model);
-				// statusBarItemEl.setText("AICM streaming...");
-				for await (const chunk of stream) {
-					const content = chunk.choices[0]?.delta?.content || "";
-					replaceRangeMoveCursor(editor, content);
-					if (chunk.usage) {
-						console.log("OpenAI API usage:", chunk.usage);
+				try {
+					const stream = await this.getOpenAIStream(
+						mhe.messages,
+						model
+					);
+					// statusBarItemEl.setText("AICM streaming...");
+					for await (const chunk of stream) {
+						const content = chunk.choices[0]?.delta?.content || "";
+						replaceRangeMoveCursor(editor, content);
+						if (chunk.usage) {
+							console.log("OpenAI API usage:", chunk.usage);
+						}
 					}
+					//statusBarItemEl.setText("AICM done.");
+				} catch (e) {
+					this.handleOpenAIError(e);
 				}
-				//statusBarItemEl.setText("AICM done.");
 
 				// BUG: on iPhone, this sometimes starts before the last 2 or 3 characters of AI message
 				const userHeading = `\n\n${"#".repeat(aiLevel + 1)} User\n`;
@@ -475,6 +482,16 @@ export default class AIChatAsMDPlugin extends Plugin {
 		const model =
 			cache?.frontmatter?.["aicmd-model"] ?? this.settings.model;
 		return model;
+	}
+
+	handleOpenAIError(e: Error) {
+		// this will give a nice traceback in the console
+		console.error("Error while streaming from OpenAI:", e);
+		// delay=0 so that the notice stays up until the user dismisses it
+		new Notice(
+			`An error occurred while communicating with the OpenAI-style service. Details: ${e}`,
+			0
+		);
 	}
 
 	async getOpenAI() {
@@ -577,24 +594,30 @@ export default class AIChatAsMDPlugin extends Plugin {
 		}
 
 		const model = this.getRequestedModel(markdownFile);
-		const stream = await this.getOpenAIStream(messages, model);
-		//statusBarItemEl.setText("AICM streaming...");
 
-		if (mode === "append") {
-			// in case the user selected from back to front, we move the cursor to the end
-			editor.setCursor(editor.offsetToPos(selEndOffset));
-			replaceRangeMoveCursor(editor, "\n\n");
-		} else {
-			editor.replaceSelection("");
-		}
+		try {
+			const stream = await this.getOpenAIStream(messages, model);
+			//statusBarItemEl.setText("AICM streaming...");
 
-		for await (const chunk of stream) {
-			const content = chunk.choices[0]?.delta?.content || "";
-			replaceRangeMoveCursor(editor, content);
-			if (chunk.usage) {
-				console.log("OpenAI API usage:", chunk.usage);
+			if (mode === "append") {
+				// in case the user selected from back to front, we move the cursor to the end
+				editor.setCursor(editor.offsetToPos(selEndOffset));
+				replaceRangeMoveCursor(editor, "\n\n");
+			} else {
+				editor.replaceSelection("");
 			}
+
+			for await (const chunk of stream) {
+				const content = chunk.choices[0]?.delta?.content || "";
+				replaceRangeMoveCursor(editor, content);
+				if (chunk.usage) {
+					console.log("OpenAI API usage:", chunk.usage);
+				}
+			}
+		} catch (e) {
+			this.handleOpenAIError(e);
 		}
+
 		replaceRangeMoveCursor(editor, "\n");
 		//statusBarItemEl.setText("AICM done.");
 	}
