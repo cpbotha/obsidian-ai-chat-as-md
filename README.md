@@ -25,6 +25,12 @@ Here we've added a special "Memories and facts" section to the system prompt mar
 
 Please see the [example system prompt markdown file](./docs/example_system_prompt.md).
 
+### Locally change used model in the frontmatter
+
+You can make local changes to the currently used AI model by setting an optional property in the frontmatter. Here I've used it to test both GPT-4o Mini and Claude 3.5 Sonnet on the same stupid question. In this case, I have enabled the optional `Show used model` which will add the used model to each AI heading as a DataView-style hidden inline field.
+
+![Screenshot showing two models answering the same question](./screenshots/obsidian-ai-chat-as-md-frontmatter-model.png)
+
 ## Quickstart
 
 - [Install plugin via community plugins](https://obsidian.md/plugins?id=ai-chat-as-md)
@@ -60,9 +66,9 @@ Please see the [example system prompt markdown file](./docs/example_system_promp
 ### Maybe
 
 - [ ] implement user-friendly file selector for the system prompt file setting
-- [ ] enable per-document / yaml-header overrides of model, system prompt, etc.
+- [X] enable per-document / yaml-header overrides of model, system prompt, etc.
 - [ ] ignore `%...%` comment blocks
-- [ ] Add used model as comment block (or some other mechanism) to each AI response section
+- [X] Optionally add used model to each AI heading
 
 ## Dev publish new version
 
