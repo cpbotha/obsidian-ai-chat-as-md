@@ -22,6 +22,7 @@ interface AIChatAsMDSettings {
 	model: string;
 	systemPrompt: string;
 	systemPromptFile: string;
+	showUsedModel: boolean;
 	debug: boolean;
 }
 
@@ -45,6 +46,7 @@ const DEFAULT_SETTINGS: AIChatAsMDSettings = {
 
 Maintain a precise, informative tone. Focus on delivering maximum relevant information in minimum space.`,
 	systemPromptFile: "",
+	showUsedModel: false,
 	debug: false,
 };
 
@@ -388,9 +390,17 @@ export default class AIChatAsMDPlugin extends Plugin {
 				}
 
 				editor.setCursor(mhe.rangeEnd);
+
+				const model = this.getRequestedModel(markdownFile);
+
 				// create heading that's one level deeper than the one we are replying to
 				const aiLevel = mhe.heading.level + 1;
-				const aiHeading = `\n\n${"#".repeat(aiLevel)} AI\n`;
+				let aiHeading = `\n\n${"#".repeat(aiLevel)} AI`;
+				// if the user configured it, show the used model in the heading
+				if (this.settings.showUsedModel) {
+					aiHeading += ` (model:: ${model})`;
+				}
+				aiHeading += "\n";
 
 				replaceRangeMoveCursor(editor, aiHeading);
 
@@ -398,7 +408,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 					console.log("About to send to AI:", mhe.messages);
 				}
 
-				const stream = await this.getOpenAIStream(mhe.messages);
+				const stream = await this.getOpenAIStream(mhe.messages, model);
 				// statusBarItemEl.setText("AICM streaming...");
 				for await (const chunk of stream) {
 					const content = chunk.choices[0]?.delta?.content || "";
@@ -453,6 +463,20 @@ export default class AIChatAsMDPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	/**
+	 * Determine which model to use for the current markdown file
+	 *
+	 * If the file has a frontmatter key aicmd-model, that will be used, else the default configured model.
+	 *
+	 * @param markdownFile the markdown file from which the frontmatter is to be read
+	 */
+	getRequestedModel(markdownFile: TFile) {
+		const cache = this.app.metadataCache.getFileCache(markdownFile);
+		const model =
+			cache?.frontmatter?.["aicmd-model"] ?? this.settings.model;
+		return model;
+	}
+
 	async getOpenAI() {
 		const openai = new OpenAI({
 			// "https://openrouter.ai/api/v1" or "https://api.openai.com/v1"
@@ -470,11 +494,14 @@ export default class AIChatAsMDPlugin extends Plugin {
 		return openai;
 	}
 
-	async getOpenAIStream(messages: OpenAI.ChatCompletionMessageParam[]) {
+	async getOpenAIStream(
+		messages: OpenAI.ChatCompletionMessageParam[],
+		model: string
+	) {
 		const openai = await this.getOpenAI();
 
 		return openai.chat.completions.create({
-			model: this.settings.model,
+			model: model,
 			messages: messages,
 			stream: true,
 		});
@@ -549,7 +576,8 @@ export default class AIChatAsMDPlugin extends Plugin {
 			console.log("About to send to AI:", messages);
 		}
 
-		const stream = await this.getOpenAIStream(messages);
+		const model = this.getRequestedModel(markdownFile);
+		const stream = await this.getOpenAIStream(messages, model);
 		//statusBarItemEl.setText("AICM streaming...");
 
 		if (mode === "append") {
@@ -678,6 +706,17 @@ class AIChatAsMDSettingsTab extends PluginSettingTab {
 					}
 				);
 			});
+		new Setting(containerEl)
+			.setName("Show used model")
+			.setDesc("Add used model to the end of each AI heading")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.showUsedModel)
+					.onChange(async (value) => {
+						this.plugin.settings.showUsedModel = value;
+						await this.plugin.saveSettings();
+					})
+			);
 
 		new Setting(containerEl)
 			.setName("Debug mode")
