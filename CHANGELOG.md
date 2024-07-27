@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2024-07-27
+
+### Added
+
+- Optionally configure a different model in the frontmatter, e.g. `aicmd-model: openai/gpt-4o-mini`, with your default config set to something else.
+- Optionally add used model to each AI response heading in thread completion mode
+- Error handling for connection to OpenAI-style backend
+
 ## [1.3.1] - 2024-07-07
 
 ### Fixed
