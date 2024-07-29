@@ -65,10 +65,11 @@ You can make local changes to the currently used AI model by setting an optional
 
 ### Maybe
 
+- [ ] support Obsidian embeds (aka transclusion) so that system prompts can be enriched with additional notes
 - [ ] implement user-friendly file selector for the system prompt file setting
 - [X] enable per-document / yaml-header overrides of model, system prompt, etc.
-- [ ] ignore `%...%` comment blocks
 - [X] Optionally add used model to each AI heading
+- [ ] ignore `%...%` comment blocks
 
 ## Dev publish new version
 
