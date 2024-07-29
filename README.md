@@ -57,6 +57,7 @@ You can make local changes to the currently used AI model by setting an optional
 
 ## Dev Tasks
 
+- [ ] support Obsidian embeds (aka transclusion) so that system prompts can be enriched with additional notes (planned for 1.5.0)
 - [X] Send embedded images to the model
 - [X] settings for default model, key, etc.
 - [X] setup yarn PnP style packages
@@ -65,7 +66,6 @@ You can make local changes to the currently used AI model by setting an optional
 
 ### Maybe
 
-- [ ] support Obsidian embeds (aka transclusion) so that system prompts can be enriched with additional notes
 - [ ] implement user-friendly file selector for the system prompt file setting
 - [X] enable per-document / yaml-header overrides of model, system prompt, etc.
 - [X] Optionally add used model to each AI heading
