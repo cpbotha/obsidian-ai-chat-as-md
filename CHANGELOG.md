@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2024-08-03
+
+### Added
+
+- Support for transclusion / embeds of whole markdown files, headings and blocks, both in your user sections and in the system prompt
+
+### Fixed
+
+- Bug with embedded images in sub-folders
+
 ## [1.4.0] - 2024-07-27
 
 ### Added
