@@ -108,28 +108,54 @@ function initMessages(
 	return messages;
 }
 
+/**
+ * Convert a subsection of a markdown file into a list of OpenAI.ChatCompletionContentPart
+ *
+ * This will take care of the main text, as well as text (whole file, heading, block) and image embeds.
+ *
+ * @param startOffset Starting 0-based offset of the range to convert. Pass null / undefined for start of file.
+ * @param endOffset Ending non-inclusive 0-based offset of the range to convert. Pass null / undefined for end of file.
+ * @param markdownFile
+ * @param vault Used to read main file and embedded files
+ * @param metadataCache Access file caches (for parsing) and link resolution
+ * @param debug
+ * @returns
+ */
 async function convertRangeToContentParts(
-	startOffset: number,
-	endOffset: number,
-	embeds: EmbedCache[],
+	startOffset: number | null,
+	endOffset: number | null,
 	markdownFile: TFile,
-	editor: Editor,
 	vault: Vault,
 	metadataCache: MetadataCache,
 	debug: boolean
-) {
+): Promise<OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
+	const cache = metadataCache.getFileCache(markdownFile);
+	if (!cache) {
+		console.error(
+			`convertRangeToContentParts() could not find cache for ${markdownFile.path}`
+		);
+		return [];
+	}
+	const embeds = cache?.embeds || [];
+
+	// get the contents so we can extract the text we need
+	const markdown = await vault.cachedRead(markdownFile);
+
+	const _startOffset = startOffset ?? 0;
+	const _endOffset = endOffset ?? markdown.length;
+
 	if (debug) {
 		console.log(
 			"convertRangeToContentParts()",
-			startOffset,
-			endOffset,
+			_startOffset,
+			_endOffset,
 			"EMBEDS:",
 			embeds
 		);
 	}
 
 	// track end of previous embed+1, or start of the whole block, so we can add text before / between embeds
-	let currentStart = startOffset;
+	let currentStart = _startOffset;
 
 	// intermediate list of text + embeds
 	const parts = [];
@@ -140,8 +166,8 @@ async function convertRangeToContentParts(
 
 	for (embed of embeds) {
 		if (
-			embed.position.start.offset >= startOffset &&
-			embed.position.end.offset <= endOffset
+			embed.position.start.offset >= _startOffset &&
+			embed.position.end.offset <= _endOffset
 		) {
 			if (embed.position.start.offset > currentStart) {
 				// this means there's text before the embed, let's add it
@@ -150,12 +176,10 @@ async function convertRangeToContentParts(
 				// fortunately, Obsidian's Editor abstraction offers posToOffset and offsetToPos
 				parts.push({
 					type: "text",
-					// AFAICS also from the CM6 docs on sliceDoc, getRange() excludes the end position
-					text: editor
-						.getRange(
-							editor.offsetToPos(currentStart),
-							editor.offsetToPos(embed.position.start.offset)
-						)
+					// previously: AFAICS also from the CM6 docs on sliceDoc, getRange() excludes the end position
+					// now: slice() excludes the end position
+					text: markdown
+						.slice(currentStart, embed.position.start.offset)
 						.trim(),
 				});
 			}
@@ -169,15 +193,10 @@ async function convertRangeToContentParts(
 	}
 
 	// take care of last bit of text
-	if (endOffset > currentStart) {
+	if (_endOffset > currentStart) {
 		parts.push({
 			type: "text",
-			text: editor
-				.getRange(
-					editor.offsetToPos(currentStart),
-					editor.offsetToPos(endOffset)
-				)
-				.trim(),
+			text: markdown.slice(currentStart, _endOffset).trim(),
 		});
 	}
 
@@ -364,9 +383,7 @@ async function convertCurrentThreadToMessages(
 			const contentParts = await convertRangeToContentParts(
 				startOffset,
 				endOffset,
-				embeds,
 				markdownFile,
-				editor,
 				app.vault,
 				app.metadataCache,
 				debug
@@ -460,6 +477,9 @@ export default class AIChatAsMDPlugin extends Plugin {
 				if (this.settings.debug) {
 					console.log("About to send to AI:", mhe.messages);
 				}
+
+				// DEBUG bypass OpenAI
+				// return null;
 
 				try {
 					const stream = await this.getOpenAIStream(
@@ -591,9 +611,24 @@ export default class AIChatAsMDPlugin extends Plugin {
 				);
 				return null;
 			}
-			const systemPrompt = await this.app.vault.cachedRead(
-				systemPromptFile
+
+			const sysContentParts = await convertRangeToContentParts(
+				null,
+				null,
+				systemPromptFile,
+				this.app.vault,
+				this.app.metadataCache,
+				this.settings.debug
 			);
+
+			// concatenate all of the "text" members
+			// effectively throwing out type == "image"
+			// until there are models that can take image as part of their system prompts
+			const systemPrompt = sysContentParts
+				.filter((part) => part.type === "text")
+				.map((part: OpenAI.ChatCompletionContentPartText) => part.text)
+				.join("\n");
+
 			return systemPrompt;
 		}
 
@@ -638,9 +673,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 			content: await convertRangeToContentParts(
 				selStartOffset,
 				selEndOffset,
-				cache.embeds || [],
 				markdownFile,
-				editor,
 				this.app.vault,
 				this.app.metadataCache,
 				this.settings.debug
