@@ -86,6 +86,10 @@ function imageToDataURL(imgSrc: string, maxEdge = 512, debug = false) {
 				const dataURL = canvas.toDataURL("image/webp");
 				resolve({ dataURL, x: dims[0], y: dims[1] });
 			};
+			image.onerror = (e) => {
+				// important to signal the error to the caller via our promise
+				reject(`Error loading image: ${e}`);
+			};
 
 			image.src = imgSrc;
 		}
