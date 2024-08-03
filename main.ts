@@ -5,6 +5,7 @@ import {
 	type EditorPosition,
 	type EmbedCache,
 	type MarkdownView,
+	type MetadataCache,
 	Notice,
 	Plugin,
 	PluginSettingTab,
@@ -12,6 +13,8 @@ import {
 	type TFile,
 	type TextAreaComponent,
 	type Vault,
+	parseLinktext,
+	resolveSubpath,
 } from "obsidian";
 
 import OpenAI from "openai";
@@ -109,8 +112,10 @@ async function convertRangeToContentParts(
 	startOffset: number,
 	endOffset: number,
 	embeds: EmbedCache[],
+	markdownFile: TFile,
 	editor: Editor,
 	vault: Vault,
+	metadataCache: MetadataCache,
 	debug: boolean
 ) {
 	if (debug) {
@@ -181,41 +186,83 @@ async function convertRangeToContentParts(
 		if (part.type === "text" && part.text) {
 			contentParts.push(part as OpenAI.ChatCompletionContentPart);
 		} else if (part.type === "embed" && part.embed?.link) {
-			const embeddedFile = vault.getFileByPath(part.embed.link);
+			// obsidian can link to an embed without subdir; could be more than one file with that name
+			// getFirstLinkpathDest() with the correct sourcePath (second arg) should return the correct file
+			// note also that you HAVE to strip off #subpath from the link, else it returns null
+			const parsedLink = parseLinktext(part.embed.link);
+			const embeddedFile = metadataCache.getFirstLinkpathDest(
+				parsedLink.path,
+				markdownFile.path
+			);
 			if (embeddedFile) {
-				try {
-					// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
-					// longest edge should be < 1568
-					// openai gpt-4o
-					// we need either < 512x512 or < 2000x768 (low or high fidelity)
-					const { dataURL, x, y } = await imageToDataURL(
-						vault.getResourcePath(embeddedFile),
-						1568,
-						debug
-					);
-
-					// DEBUG: show image in the console -- working on 2024-06-27
-					if (debug) {
-						console.log(
-							"%c ",
-							`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
-						);
-
-						console.log(dataURL);
-
-						console.log(
-							`Adding image "${part.embed.link}" at size ${x}x${y} to messages.`
-						);
+				if (embeddedFile.extension === "md") {
+					let embeddedMarkdown = await vault.cachedRead(embeddedFile);
+					if (parsedLink.subpath) {
+						const embeddedCache =
+							metadataCache.getFileCache(embeddedFile);
+						if (embeddedCache) {
+							const subpath = resolveSubpath(
+								embeddedCache,
+								parsedLink.subpath
+							);
+							if (subpath) {
+								if (subpath.type === "heading") {
+									// when subpath.next (the next heading) is null, replace with undefined so substring goes to end of file
+									embeddedMarkdown =
+										embeddedMarkdown.substring(
+											subpath.current.position.start
+												.offset,
+											subpath.next?.position.start
+												.offset ?? undefined
+										);
+								} else {
+									// must be block
+									embeddedMarkdown =
+										embeddedMarkdown.substring(
+											subpath.block.position.start.offset,
+											subpath.block.position.end.offset
+										);
+								}
+							}
+						}
 					}
+					contentParts.push({ type: "text", text: embeddedMarkdown });
+				} else {
+					// if it's not markdown, it could be an image, so we try to load it as one
+					try {
+						// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
+						// longest edge should be < 1568
+						// openai gpt-4o
+						// we need either < 512x512 or < 2000x768 (low or high fidelity)
+						const { dataURL, x, y } = await imageToDataURL(
+							vault.getResourcePath(embeddedFile),
+							1568,
+							debug
+						);
 
-					contentParts.push({
-						type: "image_url",
-						image_url: {
-							url: dataURL,
-						},
-					});
-				} catch (e) {
-					console.error("Error copying image", embeddedFile, e);
+						// DEBUG: show image in the console -- working on 2024-06-27
+						if (debug) {
+							console.log(
+								"%c ",
+								`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
+							);
+
+							console.log(dataURL);
+
+							console.log(
+								`Adding image "${part.embed.link}" at size ${x}x${y} to messages.`
+							);
+						}
+
+						contentParts.push({
+							type: "image_url",
+							image_url: {
+								url: dataURL,
+							},
+						});
+					} catch (e) {
+						console.error("Error copying image", embeddedFile, e);
+					}
 				}
 			}
 		}
@@ -318,8 +365,10 @@ async function convertCurrentThreadToMessages(
 				startOffset,
 				endOffset,
 				embeds,
+				markdownFile,
 				editor,
 				app.vault,
+				app.metadataCache,
 				debug
 			);
 
@@ -590,8 +639,10 @@ export default class AIChatAsMDPlugin extends Plugin {
 				selStartOffset,
 				selEndOffset,
 				cache.embeds || [],
+				markdownFile,
 				editor,
 				this.app.vault,
+				this.app.metadataCache,
 				this.settings.debug
 			),
 		});
