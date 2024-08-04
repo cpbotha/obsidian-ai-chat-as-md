@@ -1,6 +1,6 @@
 # AI Chat as Markdown screenshots
 
-## Use markdown files as system prompts
+## Markdown files as system prompts
 
 Here we've added a special "Memories and facts" section to the system prompt markdown file:
 
@@ -8,7 +8,7 @@ Here we've added a special "Memories and facts" section to the system prompt mar
 
 Please see the [example system prompt markdown file](./docs/example_system_prompt.md).
 
-## Obsidian embeds / transclusion for modular system prompts
+## Modular system prompts
 
 Since the 1.5.0 version of the plugin, it supports one level of transclusion / embeds (`![[my other file]]` in obsidian) in your conversations, but also in your system prompt files!
 

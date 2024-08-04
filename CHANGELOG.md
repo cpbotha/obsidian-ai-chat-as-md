@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Support for transclusion / embeds of whole markdown files, headings and blocks, both in your user sections and in the system prompt
+- Optionally configure system prompt files via the frontmatter variable `aicmd-system-prompt-file` which follows the same rules as the plugin config. E.g. `aicmd-system-prompt-file: prompts/system prompt for programming.md`
 
 ### Fixed
 

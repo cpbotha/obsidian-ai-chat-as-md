@@ -15,9 +15,17 @@ It can be configured via the Obsidian plugin settings to use any OpenAI-compatib
 - [Desktop first demo](https://youtu.be/_079Pi6UvgM?si=AJlnYs55XfYc4E5T)
 - [iPhone first demo](https://youtu.be/ZkXqeaQJAFw?si=Bbj_Wnf8F_Sy714O)
 
-## Screenshots
+## Screenshots and examples
 
 Please go to the dedicated [screenshots page](./screenshots/screenshots.md)
+
+## Features
+
+- Multiple branching chats as nested headings anywhere in your notes, see [nesting example](./docs/example_nesting.md)
+- Optionally configure different AI models for each markdown file via the frontmatter, in addition to the conventional plugin config
+- Use markdown files as system prompts. Use this for example to build up a library of system prompts for different applications.
+- Optionally configure a different system prompt file for each note via the frontmatter, e.g. `aicmd-system-prompt-file: ai-chats/system prompt productivity.md`
+- Use Obsidian embeds to construct modular and dynamic system prompts, see [screenshots](./screenshots/screenshots.md)
 
 ## Quickstart
 
