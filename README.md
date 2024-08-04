@@ -17,19 +17,7 @@ It can be configured via the Obsidian plugin settings to use any OpenAI-compatib
 
 ## Screenshots
 
-### Use markdown files as system prompts
-
-Here we've added a special "Memories and facts" section to the system prompt markdown file:
-
-![Screenshot showing file as system prompt with memories](./screenshots/obsidian-ai-chat-as-md-file-as-system-prompt.png)
-
-Please see the [example system prompt markdown file](./docs/example_system_prompt.md).
-
-### Locally change used model in the frontmatter
-
-You can make local changes to the currently used AI model by setting an optional property in the frontmatter. Here I've used it to test both GPT-4o Mini and Claude 3.5 Sonnet on the same stupid question. In this case, I have enabled the optional `Show used model` which will add the used model to each AI heading as a DataView-style hidden inline field.
-
-![Screenshot showing two models answering the same question](./screenshots/obsidian-ai-chat-as-md-frontmatter-model.png)
+Please go to the dedicated [screenshots page](./screenshots/screenshots.md)
 
 ## Quickstart
 
