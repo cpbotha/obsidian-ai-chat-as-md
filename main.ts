@@ -15,6 +15,7 @@ import {
 	type Vault,
 	parseLinktext,
 	resolveSubpath,
+	type HeadingCache,
 } from "obsidian";
 
 import OpenAI from "openai";
@@ -118,8 +119,9 @@ function initMessages(
  * @param markdownFile
  * @param vault Used to read main file and embedded files
  * @param metadataCache Access file caches (for parsing) and link resolution
- * @param debug
- * @returns
+ * @param debug If True, will print debug output to console
+ * @returns List of content parts, ready for concatenation into OpenAI-style request
+ * @raises Error if conversion could not take place. This should not happen in normal operation.
  */
 async function convertRangeToContentParts(
 	startOffset: number | null,
@@ -131,10 +133,10 @@ async function convertRangeToContentParts(
 ): Promise<OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
 	const cache = metadataCache.getFileCache(markdownFile);
 	if (!cache) {
-		console.error(
-			`convertRangeToContentParts() could not find cache for ${markdownFile.path}`
-		);
-		return [];
+		const errMsg = `convertRangeToContentParts() could not find cache for ${markdownFile.path}`;
+		console.error(errMsg);
+		// if we can't find the cache, there is something seriously wrong, so we interrupt processing completely
+		throw new Error(errMsg);
 	}
 	const embeds = cache?.embeds || [];
 
@@ -290,6 +292,12 @@ async function convertRangeToContentParts(
 	return contentParts;
 }
 
+interface IThreadMessages {
+	messages: OpenAI.ChatCompletionMessageParam[];
+	heading: HeadingCache;
+	rangeEnd: EditorPosition;
+}
+
 // find current cursor position, determine its heading path, then convert that path into messages
 // app needed for: metadataCache, vault
 // editor needed for: getCursor, getLine, lastLine, getRange, etc.
@@ -299,9 +307,11 @@ async function convertCurrentThreadToMessages(
 	app: App,
 	editor: Editor,
 	debug = false
-) {
+): Promise<IThreadMessages> {
 	const cache = app.metadataCache.getFileCache(markdownFile);
-	if (!cache) return null;
+	if (!cache)
+		throw new Error(`Could not find cache for ${markdownFile.path}`);
+
 	const headings = cache.headings || [];
 
 	// find heading containing the cursor, and then the path of containing headings up the tree
@@ -330,7 +340,8 @@ async function convertCurrentThreadToMessages(
 		}
 	}
 
-	if (!currentHeading) return null;
+	if (!currentHeading)
+		throw new Error(`No headings to work with in ${markdownFile.path}`);
 
 	const messages = initMessages(systemMessage);
 
@@ -376,10 +387,10 @@ async function convertCurrentThreadToMessages(
 		} else {
 			// this is a user message, so we do multi-part / ContentPart[]
 
-			const embeds = cache.embeds || [];
 			const startOffset = heading.position.end.offset + 1;
 			const endOffset = rangeEndOffset;
 
+			// raised exceptions will propagate to convertThreadToMessages()'s caller and be shown as a notice
 			const contentParts = await convertRangeToContentParts(
 				startOffset,
 				endOffset,
@@ -388,7 +399,6 @@ async function convertCurrentThreadToMessages(
 				app.metadataCache,
 				debug
 			);
-
 			messages.push({
 				role: role,
 				content: contentParts,
@@ -397,8 +407,9 @@ async function convertCurrentThreadToMessages(
 	}
 
 	if (!heading) {
-		console.error("Unexpected that we have no last heading here.");
-		return null;
+		const errMsg = "Really unexpected that we have no last heading here.";
+		console.error(errMsg);
+		throw new Error(errMsg);
 	}
 
 	return { messages, heading, rangeEnd };
@@ -447,15 +458,17 @@ export default class AIChatAsMDPlugin extends Plugin {
 					return;
 				}
 
-				const mhe = await convertCurrentThreadToMessages(
-					markdownFile,
-					systemPrompt,
-					this.app,
-					editor,
-					this.settings.debug
-				);
-				if (!mhe) {
-					new Notice("No headings found");
+				let mhe: IThreadMessages;
+				try {
+					mhe = await convertCurrentThreadToMessages(
+						markdownFile,
+						systemPrompt,
+						this.app,
+						editor,
+						this.settings.debug
+					);
+				} catch (e) {
+					new Notice(`Error converting thread to messages: ${e}`);
 					return;
 				}
 
@@ -633,19 +646,27 @@ export default class AIChatAsMDPlugin extends Plugin {
 				this.app.vault.getFileByPath(systemPromptFilename);
 			if (!systemPromptFile) {
 				new Notice(
-					`AI Chat as MD could not read system prompt file "${systemPromptFilename}". Please fix its path in the plugin settings or in this file's frontmatter.`
+					`AI Chat as MD could not read system prompt file "${systemPromptFilename}". Please check its path in the plugin settings or in this file's frontmatter.`
 				);
 				return null;
 			}
 
-			const sysContentParts = await convertRangeToContentParts(
-				null,
-				null,
-				systemPromptFile,
-				this.app.vault,
-				this.app.metadataCache,
-				this.settings.debug
-			);
+			let sysContentParts: OpenAI.Chat.Completions.ChatCompletionContentPart[];
+			try {
+				sysContentParts = await convertRangeToContentParts(
+					null,
+					null,
+					systemPromptFile,
+					this.app.vault,
+					this.app.metadataCache,
+					this.settings.debug
+				);
+			} catch (e) {
+				new Notice(
+					`Error parsing system prompt file "${systemPromptFilename}": ${e}`
+				);
+				return null;
+			}
 
 			// concatenate all of the "text" members
 			// effectively throwing out type == "image"
@@ -694,17 +715,24 @@ export default class AIChatAsMDPlugin extends Plugin {
 			return;
 		}
 		const messages = initMessages(systemPrompt);
-		messages.push({
-			role: "user",
-			content: await convertRangeToContentParts(
-				selStartOffset,
-				selEndOffset,
-				markdownFile,
-				this.app.vault,
-				this.app.metadataCache,
-				this.settings.debug
-			),
-		});
+		try {
+			messages.push({
+				role: "user",
+				content: await convertRangeToContentParts(
+					selStartOffset,
+					selEndOffset,
+					markdownFile,
+					this.app.vault,
+					this.app.metadataCache,
+					this.settings.debug
+				),
+			});
+		} catch (e) {
+			new Notice(
+				`Error converting selection to OpenAI-style messages: ${e}`
+			);
+			return;
+		}
 
 		if (this.settings.debug) {
 			console.log("About to send to AI:", messages);
