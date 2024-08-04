@@ -442,7 +442,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 					return;
 				}
 
-				const systemPrompt = await this.getSystemPrompt();
+				const systemPrompt = await this.getSystemPrompt(markdownFile);
 				if (!systemPrompt) {
 					return;
 				}
@@ -560,6 +560,27 @@ export default class AIChatAsMDPlugin extends Plugin {
 		return model;
 	}
 
+	/**
+	 * Determine whether user wants to use a system prompt file and if so which one.
+	 *
+	 * If the file has a frontmatter key aicmd-system-prompt-file, that will be used, else the default configured system prompt file, else the default configured system prompt text.
+	 *
+	 * @param markdownFile File that the user is working on
+	 * @returns Path to the system prompt file to use or empty string "" if the user wants to use the default system prompt text.
+	 */
+	getRequestedSystemPromptFile(markdownFile: TFile): string {
+		const cache = this.app.metadataCache.getFileCache(markdownFile);
+		const systemPromptFile =
+			cache?.frontmatter?.["aicmd-system-prompt-file"] ??
+			this.settings.systemPromptFile;
+		if (this.settings.debug) {
+			console.log(
+				`Using system prompt file ${systemPromptFile} for "${markdownFile.path}"`
+			);
+		}
+		return systemPromptFile;
+	}
+
 	handleOpenAIError(e: Error) {
 		// this will give a nice traceback in the console
 		console.error("Error while streaming from OpenAI:", e);
@@ -600,14 +621,19 @@ export default class AIChatAsMDPlugin extends Plugin {
 		});
 	}
 
-	async getSystemPrompt() {
-		if (this.settings.systemPromptFile) {
-			const systemPromptFile = this.app.vault.getFileByPath(
-				this.settings.systemPromptFile
-			);
+	async getSystemPrompt(markdownFile: TFile) {
+		const systemPromptFilename =
+			this.getRequestedSystemPromptFile(markdownFile);
+		if (systemPromptFilename) {
+			// we expect the user to specify the actual file path relative to the vault, and to include the extension,
+			// e.g. "prompts/productivity coach.md". We considered using the same path resolution as for embedded files
+			// (see metadataCache.getFirstLinkpathDest()), but that only makes sense for locally specified prompts, not
+			// those specified in the global plugin configuration.
+			const systemPromptFile =
+				this.app.vault.getFileByPath(systemPromptFilename);
 			if (!systemPromptFile) {
 				new Notice(
-					`AI Chat as MD could not read system prompt file "${this.settings.systemPromptFile}". Please fix its path in the plugin settings.`
+					`AI Chat as MD could not read system prompt file "${systemPromptFilename}". Please fix its path in the plugin settings or in this file's frontmatter.`
 				);
 				return null;
 			}
@@ -663,7 +689,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 			.map((pos) => editor.posToOffset(pos))
 			.sort((a, b) => a - b);
 
-		const systemPrompt = await this.getSystemPrompt();
+		const systemPrompt = await this.getSystemPrompt(markdownFile);
 		if (!systemPrompt) {
 			return;
 		}
