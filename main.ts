@@ -494,6 +494,8 @@ export default class AIChatAsMDPlugin extends Plugin {
 				// DEBUG bypass OpenAI
 				// return null;
 
+				let citations: string[] = [];
+
 				try {
 					const stream = await this.getOpenAIStream(
 						mhe.messages,
@@ -506,10 +508,25 @@ export default class AIChatAsMDPlugin extends Plugin {
 						if (chunk.usage) {
 							console.log("OpenAI API usage:", chunk.usage);
 						}
+						if ((chunk.citations ?? []).length > 0) {
+							citations = chunk.citations;
+						}
 					}
+
 					//statusBarItemEl.setText("AICM done.");
 				} catch (e) {
 					this.handleOpenAIError(e);
+				}
+
+				// create numbered list of citations from citations array
+				if (citations.length > 0) {
+					const citationList = citations
+						.map((url, index) => `${index + 1}. <${url}>`) // Format as N. <URL>
+						.join("\n"); // Join with newlines
+					replaceRangeMoveCursor(
+						editor,
+						`\n\n**Citations:**\n${citationList}`
+					);
 				}
 
 				// BUG: on iPhone, this sometimes starts before the last 2 or 3 characters of AI message
