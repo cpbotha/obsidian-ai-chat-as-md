@@ -2,16 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ## [1.6.0] - 2025-05-02
 
-### Added
-
-- Support for citations as returned by the Perplexity Sonar models
+- Add support for citations as returned by the Perplexity Sonar range of search-integrated models
+- Default system prompt with stronger request to AI not to use headings
 
 ## [1.5.0] - 2024-08-03
 
