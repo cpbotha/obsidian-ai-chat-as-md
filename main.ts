@@ -609,6 +609,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 			// "https://openrouter.ai/api/v1" or "https://api.openai.com/v1"
 			baseURL: `${this.settings.apiHost}/v1`,
 			apiKey: this.settings.openAIAPIKey,
+			timeout: 30 * 1000, // 30 seconds
 			defaultHeaders: {
 				"HTTP-Referer":
 					"https://github.com/cpbotha/obsidian-ai-chat-as-md", // Optional, for including your app on openrouter.ai rankings.
