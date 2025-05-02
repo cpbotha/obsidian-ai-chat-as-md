@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "obsidian-ai-chat-as-md",
+	"version": "1.6.0",
+	"description": "Multiple branching AI conversations as Markdown hierarchy",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

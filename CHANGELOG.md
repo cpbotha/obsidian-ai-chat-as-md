@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2025-05-02
+
+### Added
+
+- Support for citations as returned by the Perplexity Sonar models
+
 ## [1.5.0] - 2024-08-03
 
 ### Added
