@@ -440,6 +440,12 @@ function renderCitations(citations: string[], editor: Editor) {
 	}
 }
 
+// Define an interface extending the OpenAI chunk type with optional citations
+interface ChatCompletionChunkWithCitations
+	extends OpenAI.Chat.Completions.ChatCompletionChunk {
+	citations: string[];
+}
+
 export default class AIChatAsMDPlugin extends Plugin {
 	settings: AIChatAsMDSettings;
 
@@ -518,8 +524,10 @@ export default class AIChatAsMDPlugin extends Plugin {
 						if (chunk.usage) {
 							console.log("OpenAI API usage:", chunk.usage);
 						}
-						if ((chunk.citations ?? []).length > 0) {
-							citations = chunk.citations;
+						const chunkWithCitations =
+							chunk as ChatCompletionChunkWithCitations;
+						if ((chunkWithCitations.citations ?? []).length > 0) {
+							citations = chunkWithCitations.citations;
 						}
 					}
 
@@ -777,8 +785,10 @@ export default class AIChatAsMDPlugin extends Plugin {
 				const content = chunk.choices[0]?.delta?.content || "";
 				replaceRangeMoveCursor(editor, content);
 				// if there are citations in the chunk, save them
-				if ((chunk.citations ?? []).length > 0) {
-					citations = chunk.citations;
+				const chunkWithCitations =
+					chunk as ChatCompletionChunkWithCitations;
+				if ((chunkWithCitations.citations ?? []).length > 0) {
+					citations = chunkWithCitations.citations;
 				}
 				if (chunk.usage) {
 					console.log("OpenAI API usage:", chunk.usage);
