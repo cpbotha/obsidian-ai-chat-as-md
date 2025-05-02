@@ -1,5 +1,13 @@
 # AI Chat as Markdown screenshots
 
+## Citation support
+
+Some models like the Perplexity Sonar range have built-in grounding with web search results. When it notices this, the plugin will render the citations list after the AI answer.
+
+Here I am using `perplexity/sonar` via [OpenRouter](https://openrouter.ai/).
+
+![screenshot showing perplexity sonar citations list](./obsidian-ai-chat-as-md-perplexity-sonar-citations-20250402.png)
+
 ## Markdown files as system prompts
 
 Here we've added a special "Memories and facts" section to the system prompt markdown file:
