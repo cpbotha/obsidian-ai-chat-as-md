@@ -760,6 +760,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 
 		const model = this.getRequestedModel(markdownFile);
 
+		let citations: string[] = [];
 		try {
 			const stream = await this.getOpenAIStream(messages, model);
 			//statusBarItemEl.setText("AICM streaming...");
@@ -775,6 +776,10 @@ export default class AIChatAsMDPlugin extends Plugin {
 			for await (const chunk of stream) {
 				const content = chunk.choices[0]?.delta?.content || "";
 				replaceRangeMoveCursor(editor, content);
+				// if there are citations in the chunk, save them
+				if ((chunk.citations ?? []).length > 0) {
+					citations = chunk.citations;
+				}
 				if (chunk.usage) {
 					console.log("OpenAI API usage:", chunk.usage);
 				}
@@ -782,6 +787,9 @@ export default class AIChatAsMDPlugin extends Plugin {
 		} catch (e) {
 			this.handleOpenAIError(e);
 		}
+
+		// create numbered list of citations from citations array
+		renderCitations(citations, editor);
 
 		replaceRangeMoveCursor(editor, "\n");
 		//statusBarItemEl.setText("AICM done.");
