@@ -430,6 +430,15 @@ function replaceRangeMoveCursor(editor: Editor, text: string) {
 	});
 }
 
+function renderCitations(citations: string[], editor: Editor) {
+	if (citations.length > 0) {
+		const citationList = citations
+			.map((url, index) => `${index + 1}. <${url}>`) // Format as N. <URL>
+			.join("\n"); // Join with newlines
+		replaceRangeMoveCursor(editor, `\n\n**Citations:**\n${citationList}`);
+	}
+}
+
 export default class AIChatAsMDPlugin extends Plugin {
 	settings: AIChatAsMDSettings;
 
@@ -519,15 +528,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 				}
 
 				// create numbered list of citations from citations array
-				if (citations.length > 0) {
-					const citationList = citations
-						.map((url, index) => `${index + 1}. <${url}>`) // Format as N. <URL>
-						.join("\n"); // Join with newlines
-					replaceRangeMoveCursor(
-						editor,
-						`\n\n**Citations:**\n${citationList}`
-					);
-				}
+				renderCitations(citations, editor);
 
 				// BUG: on iPhone, this sometimes starts before the last 2 or 3 characters of AI message
 				const userHeading = `\n\n${"#".repeat(aiLevel + 1)} User\n`;
