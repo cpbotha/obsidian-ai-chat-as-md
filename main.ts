@@ -293,6 +293,38 @@ async function convertRangeToContentParts(
 	return contentParts;
 }
 
+// find heading containing the cursor, and then the path of containing headings up the tree
+function getHeadingPathToCursor(headings: HeadingCache[], cursorLine: number) {
+	const headingPath = [];
+	let currentHeading = null;
+	for (let i = headings.length - 1; i >= 0; i--) {
+		const heading = headings[i];
+		if (currentHeading) {
+			// we've already found currentHeading, containing the cursor
+			// so here we're tracing the path from the cursor up to the topmost heading
+			if (
+				heading.position.start.line <
+					currentHeading.position.start.line &&
+				heading.level < currentHeading.level
+			) {
+				headingPath.unshift(i);
+				currentHeading = heading;
+			}
+		} else {
+			// we are still searching for the currentHeading (containing the cursor)
+			if (heading.position.start.line <= cursorLine) {
+				// ok we found the heading containing the cursor, start from here
+				headingPath.unshift(i);
+				currentHeading = heading;
+			}
+		}
+	}
+
+	if (!currentHeading) return []; // empty array, no headings to work with
+
+	return headingPath;
+}
+
 interface IThreadMessages {
 	messages: OpenAI.ChatCompletionMessageParam[];
 	heading: HeadingCache;
@@ -315,34 +347,13 @@ async function convertCurrentThreadToMessages(
 
 	const headings = cache.headings || [];
 
-	// find heading containing the cursor, and then the path of containing headings up the tree
-	const headingPath = [];
-	let currentHeading = null;
-	for (let i = headings.length - 1; i >= 0; i--) {
-		const heading = headings[i];
-		if (currentHeading) {
-			// we've already found currentHeading, containing the cursor
-			// so here we're tracing the path from the cursor up to the topmost heading
-			if (
-				heading.position.start.line <
-					currentHeading.position.start.line &&
-				heading.level < currentHeading.level
-			) {
-				headingPath.unshift(i);
-				currentHeading = heading;
-			}
-		} else {
-			// we are still searching for the currentHeading (containing the cursor)
-			if (heading.position.start.line <= editor.getCursor().line) {
-				// ok we found the heading containing the cursor, start from here
-				headingPath.unshift(i);
-				currentHeading = heading;
-			}
-		}
-	}
-
-	if (!currentHeading)
+	const headingPath = getHeadingPathToCursor(
+		headings,
+		editor.getCursor().line
+	);
+	if (headingPath.length === 0) {
 		throw new Error(`No headings to work with in ${markdownFile.path}`);
+	}
 
 	const messages = initMessages(systemMessage);
 
