@@ -457,6 +457,34 @@ interface ChatCompletionChunkWithCitations
 	citations: string[];
 }
 
+/**
+ * Ensure that we are in editing source mode to work-around AI streaming updating document out of order.
+ * @param view
+ * @returns
+ */
+function maybeSwitchToSourceMode(view: MarkdownView) {
+	if (view.getMode() === "source" && view.getState().source === false) {
+		// https://forum.obsidian.md/t/how-to-get-the-live-preview-status-within-the-typescript-code-for-plugin-development/80996/2
+		view.setState({ ...view.getState(), source: true }, { history: false });
+		// yes we switched to editing in source mode (from editing in preview mode)
+		return true;
+	}
+
+	return false;
+}
+
+function maybeSwitchBackToPreviewMode(view: MarkdownView, didSwitch: boolean) {
+	if (didSwitch) {
+		// switch back to preview mode
+		view.setState(
+			{ ...view.getState(), source: false },
+			{
+				history: false,
+			}
+		);
+	}
+}
+
 export default class AIChatAsMDPlugin extends Plugin {
 	settings: AIChatAsMDSettings;
 
@@ -523,6 +551,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 
 				let citations: string[] = [];
 
+				const didSwitchMode = maybeSwitchToSourceMode(view);
 				try {
 					const stream = await this.getOpenAIStream(
 						mhe.messages,
