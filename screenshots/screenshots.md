@@ -10,11 +10,11 @@ Here I am using `perplexity/sonar` via [OpenRouter](https://openrouter.ai/).
 
 ## Image generation and editing
 
-Configure the plugin with a dedicated "API key for OpenAI image generation" and you'll be able to use OpenAI's `gpt-image-1` for conversational image generation and editing.
+Configure the plugin with a separate OpenAI API key for image generation and you'll be able to use OpenAI's `gpt-image-1` for conversational image generation and editing.
 
-This only sends the heading containing your cursor, including any images you embed. If there are no images in the current section, it will request a generation and an edit otherwise.
+This function, `AI Chat as Markdown: Generate or edit images`, only sends the section containing your cursor, including any images you embed in that section. If there are no images and only text in the current section, it will request a text-to-image generation. If there are images, it will request an edit based on your prompt.
 
-The nice thing is, you can easily add text to the new section created by the AI generation / edit, and continue with more edits. This works with generated images, but of course any other images that you supply.
+You can easily add text to the new section created by the AI generation / edit, and continue with more edits. This works with generated images, but of course any other images that you insert.
 
 > [!NOTE]
 > At the time of writing (2025-05-05) an image generation or edit easily takes up to a minute.
