@@ -16,14 +16,17 @@ import {
 	parseLinktext,
 	resolveSubpath,
 	type HeadingCache,
+	moment,
 } from "obsidian";
 
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
+import type { FileLike } from "openai/uploads";
 
 interface AIChatAsMDSettings {
 	apiHost: string;
 	openAIAPIKey: string;
 	model: string;
+	openAIImageGenAPIKey: string;
 	systemPrompt: string;
 	systemPromptFile: string;
 	showUsedModel: boolean;
@@ -38,6 +41,7 @@ const DEFAULT_SETTINGS: AIChatAsMDSettings = {
 	// openai: gpt-4o
 	// openrouter: anthropic/claude-3.5-sonnet
 	model: "gpt-4o",
+	openAIImageGenAPIKey: "",
 	systemPrompt: `You are an AI assistant, outputting into an Obsidian markdown document. You have access to fenced codeblocks and MathJax notation. When responding:
 
 1. Prioritize brevity and information density. Aim for concise, high-impact answers.
@@ -100,6 +104,24 @@ function imageToDataURL(imgSrc: string, maxEdge = 512, debug = false) {
 		}
 	);
 }
+// from https://byby.dev/js-slugify-string thanks!
+// modified to make space replacement optional
+function slugify(str: string, replaceSpaces = true) {
+	let s = String(str)
+		.normalize("NFKD") // split accented characters into their base characters and diacritical marks
+		.replace(/[\u0300-\u036f]/g, "") // remove all the accents, which happen to be all in the \u03xx UNICODE block.
+		.trim() // trim leading or trailing whitespace
+		.toLowerCase() // convert to lowercase
+		.replace(/[^a-z0-9 -]/g, ""); // remove non-alphanumeric characters
+
+	if (replaceSpaces) {
+		s = s
+			.replace(/\s+/g, "-") // replace spaces with hyphens
+			.replace(/-+/g, "-"); // remove consecutive hyphens
+	}
+
+	return s;
+}
 
 function initMessages(
 	systemMessage: string
@@ -109,6 +131,17 @@ function initMessages(
 	];
 	return messages;
 }
+
+interface ChatCompletionContentPartImageBuffer {
+	type: "image_buffer";
+	image_buffer: ArrayBuffer;
+	mime_type: string;
+	basename: string;
+}
+
+type ExtendedChatCompletionContentPart =
+	| OpenAI.Chat.Completions.ChatCompletionContentPart
+	| ChatCompletionContentPartImageBuffer;
 
 /**
  * Convert a subsection of a markdown file into a list of OpenAI.ChatCompletionContentPart
@@ -120,6 +153,7 @@ function initMessages(
  * @param markdownFile
  * @param vault Used to read main file and embedded files
  * @param metadataCache Access file caches (for parsing) and link resolution
+ * @param base64Images If True, will convert images to base64 data URLs else ArrayBuffers in part with `type` = "image_buffer" and `image_buffer` = <ArrayBuffer>
  * @param debug If True, will print debug output to console
  * @returns List of content parts, ready for concatenation into OpenAI-style request
  * @raises Error if conversion could not take place. This should not happen in normal operation.
@@ -130,8 +164,9 @@ async function convertRangeToContentParts(
 	markdownFile: TFile,
 	vault: Vault,
 	metadataCache: MetadataCache,
+	base64Images: boolean,
 	debug: boolean
-): Promise<OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
+): Promise<ExtendedChatCompletionContentPart[]> {
 	const cache = metadataCache.getFileCache(markdownFile);
 	if (!cache) {
 		const errMsg = `convertRangeToContentParts() could not find cache for ${markdownFile.path}`;
@@ -203,7 +238,7 @@ async function convertRangeToContentParts(
 		});
 	}
 
-	const contentParts: Array<OpenAI.ChatCompletionContentPart> = [];
+	const contentParts: Array<ExtendedChatCompletionContentPart> = [];
 	for (const part of parts) {
 		if (part.type === "text" && part.text) {
 			contentParts.push(part as OpenAI.ChatCompletionContentPart);
@@ -252,36 +287,63 @@ async function convertRangeToContentParts(
 				} else {
 					// if it's not markdown, it could be an image, so we try to load it as one
 					try {
-						// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
-						// longest edge should be < 1568
-						// openai gpt-4o
-						// we need either < 512x512 or < 2000x768 (low or high fidelity)
-						const { dataURL, x, y } = await imageToDataURL(
-							vault.getResourcePath(embeddedFile),
-							1568,
-							debug
-						);
-
-						// DEBUG: show image in the console -- working on 2024-06-27
-						if (debug) {
-							console.log(
-								"%c ",
-								`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
+						if (base64Images) {
+							// claude sonnet 3.5 image sizes: https://docs.anthropic.com/en/docs/build-with-claude/vision#evaluate-image-size
+							// longest edge should be < 1568
+							// openai gpt-4o
+							// we need either < 512x512 or < 2000x768 (low or high fidelity)
+							const { dataURL, x, y } = await imageToDataURL(
+								vault.getResourcePath(embeddedFile),
+								1568,
+								debug
 							);
 
-							console.log(dataURL);
+							// FIXME: alternatively, vault.readBinary() returns ArrayBuffer, ready for openai toFile
 
-							console.log(
-								`Adding image "${part.embed.link}" at size ${x}x${y} to messages.`
-							);
+							if (debug) {
+								// DEBUG: show image in the console -- working on 2024-06-27
+								// FIXME: temporarily disabling, because heavy
+								// console.log(
+								// 	"%c ",
+								// 	`font-size:1px; padding: ${x}px ${y}px; background:url(${dataURL}) no-repeat; background-size: contain;`
+								// );
+
+								// console.log(dataURL);
+
+								console.log(
+									`Adding image "${part.embed.link}" at size ${x}x${y} to messages.`
+								);
+							}
+
+							contentParts.push({
+								type: "image_url",
+								image_url: {
+									url: dataURL,
+								},
+							});
+						} else {
+							const ext = embeddedFile.extension.toLowerCase();
+							if (["png", "webp", "jpg", "jpeg"].includes(ext)) {
+								// It's a supported image type
+								const imageBuffer = await vault.readBinary(
+									embeddedFile
+								);
+								const mime_type =
+									ext === "jpg"
+										? "image/jpeg"
+										: `image/${ext}`;
+								contentParts.push({
+									type: "image_buffer",
+									image_buffer: imageBuffer,
+									mime_type: mime_type,
+									basename: embeddedFile.basename,
+								});
+							} else {
+								console.log(
+									`Could not handle embedding type ${ext}`
+								);
+							}
 						}
-
-						contentParts.push({
-							type: "image_url",
-							image_url: {
-								url: dataURL,
-							},
-						});
 					} catch (e) {
 						console.error("Error copying image", embeddedFile, e);
 					}
@@ -327,6 +389,7 @@ function getHeadingPathToCursor(headings: HeadingCache[], cursorLine: number) {
 
 interface IThreadMessages {
 	messages: OpenAI.ChatCompletionMessageParam[];
+	// last heading in the headingPath, typically the one containing the cursor
 	heading: HeadingCache;
 	rangeEnd: EditorPosition;
 }
@@ -362,26 +425,15 @@ async function convertCurrentThreadToMessages(
 	let heading = null;
 	// we want to find embeds in the range
 	let rangeEndOffset = -1;
+	let rangeStartOffset: number;
 	for (const i of headingPath) {
 		// determine current heading to next heading / end of file block
 		heading = headings[i];
-		const nextHeading = headings[i + 1];
-		if (nextHeading) {
-			const line = nextHeading.position.start.line - 1;
-			rangeEnd = {
-				line: line,
-				ch: editor.getLine(line).length,
-			};
-			rangeEndOffset = nextHeading.position.start.offset - 1;
-		} else {
-			// this is the last heading, so we have to use end of file
-			const lastLine = editor.lastLine();
-			rangeEnd = {
-				line: lastLine,
-				ch: editor.getLine(lastLine).length,
-			};
-			rangeEndOffset = editor.getValue().length;
-		}
+		({ rangeStartOffset, rangeEnd, rangeEndOffset } = getHeadingRange(
+			headings,
+			i,
+			editor
+		));
 
 		const uHeading = heading.heading.toUpperCase();
 		const role =
@@ -399,18 +451,20 @@ async function convertCurrentThreadToMessages(
 		} else {
 			// this is a user message, so we do multi-part / ContentPart[]
 
-			const startOffset = heading.position.end.offset + 1;
-			const endOffset = rangeEndOffset;
+			// this is now returned by getHeadingRange()
+			//const startOffset = heading.position.end.offset + 1;
+			//const endOffset = rangeEndOffset;
 
 			// raised exceptions will propagate to convertThreadToMessages()'s caller and be shown as a notice
-			const contentParts = await convertRangeToContentParts(
-				startOffset,
-				endOffset,
+			const contentParts = (await convertRangeToContentParts(
+				rangeStartOffset,
+				rangeEndOffset,
 				markdownFile,
 				app.vault,
 				app.metadataCache,
+				true, // base64Images
 				debug
-			);
+			)) as OpenAI.ChatCompletionContentPart[];
 			messages.push({
 				role: role,
 				content: contentParts,
@@ -426,6 +480,41 @@ async function convertCurrentThreadToMessages(
 
 	return { messages, heading, rangeEnd };
 }
+/**
+ * Return the range of text starting right after heading i and continuing to right before heading i+1 or end of doc.
+ * @param headings
+ * @param i
+ * @param editor
+ * @returns
+ */
+function getHeadingRange(headings: HeadingCache[], i: number, editor: Editor) {
+	const heading = headings[i];
+	const nextHeading = headings[i + 1];
+	let rangeEnd: EditorPosition = { line: 0, ch: 0 };
+	// we want to find embeds in the range
+	let rangeEndOffset = -1;
+	if (nextHeading) {
+		const line = nextHeading.position.start.line - 1;
+		rangeEnd = {
+			line: line,
+			ch: editor.getLine(line).length,
+		};
+		rangeEndOffset = nextHeading.position.start.offset - 1;
+	} else {
+		// headings[i] is the last heading, so we have to use end of file
+		const lastLine = editor.lastLine();
+		rangeEnd = {
+			line: lastLine,
+			ch: editor.getLine(lastLine).length,
+		};
+		rangeEndOffset = editor.getValue().length;
+	}
+	return {
+		rangeStartOffset: heading.position.end.offset + 1,
+		rangeEnd,
+		rangeEndOffset,
+	};
+}
 
 // replace range, but also move cursor ahead to be located right after the inserted multi-line text
 function replaceRangeMoveCursor(editor: Editor, text: string) {
@@ -440,6 +529,8 @@ function replaceRangeMoveCursor(editor: Editor, text: string) {
 			(lines.length === 1 ? cursor.ch : 0) +
 			lines[lines.length - 1].length,
 	});
+	//editor.refresh();
+	// even without refresh, it's more reliable when in source mode!
 }
 
 function renderCitations(citations: string[], editor: Editor) {
@@ -580,8 +671,13 @@ export default class AIChatAsMDPlugin extends Plugin {
 				renderCitations(citations, editor);
 
 				// BUG: on iPhone, this sometimes starts before the last 2 or 3 characters of AI message
+				// tested requestAnimationFrame and setTimeout here, weirdly the first chunk of the AI message came AFTER this heading!
+				// BUG is much worse with markdownpreview mode!
+				// switch to source mode, do thing, then back? -- Yes, see maybeSwitchToSourceMode()
 				const userHeading = `\n\n${"#".repeat(aiLevel + 1)} User\n`;
 				replaceRangeMoveCursor(editor, userHeading);
+
+				maybeSwitchBackToPreviewMode(view, didSwitchMode);
 			},
 		});
 
@@ -602,6 +698,123 @@ export default class AIChatAsMDPlugin extends Plugin {
 			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
 			editorCallback: async (editor: Editor, view: MarkdownView) => {
 				await this.completeSelection(editor, view, "replace");
+			},
+		});
+
+		this.addCommand({
+			id: "generate-or-edit-images",
+			name: "Generate or edit images",
+			icon: "bot-message-square",
+			// https://docs.obsidian.md/Plugins/User+interface/Commands#Editor+commands
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
+				const markdownFile = view.file;
+				if (!markdownFile) {
+					new Notice("No markdown file open");
+					return;
+				}
+
+				const cache = this.app.metadataCache.getFileCache(markdownFile);
+				if (!cache)
+					throw new Error(
+						`Could not find cache for ${markdownFile.path}`
+					);
+
+				const headings = cache.headings || [];
+
+				const headingPath = getHeadingPathToCursor(
+					headings,
+					editor.getCursor().line
+				);
+				if (headingPath.length === 0) {
+					throw new Error(
+						`No headings to work with in ${markdownFile.path}`
+					);
+				}
+
+				const thisHeadingIdx = headingPath.slice(-1)[0];
+				const { rangeStartOffset, rangeEnd, rangeEndOffset } =
+					getHeadingRange(headings, thisHeadingIdx, editor);
+
+				// each part has type "text" or "image_buffer" (because base64Images = false)
+				const parts = await convertRangeToContentParts(
+					rangeStartOffset,
+					rangeEndOffset,
+					markdownFile,
+					this.app.vault,
+					this.app.metadataCache,
+					false, // base64Images
+					this.settings.debug
+				);
+				console.log("parts", parts);
+
+				// loop through parts, concatenating all text (= prompt) and making a list of images
+				let prompt = "";
+				const images: FileLike[] = [];
+
+				for (const part of parts) {
+					if (part.type === "text") {
+						prompt += `\n${part.text}`;
+					} else if (part.type === "image_buffer") {
+						images.push(
+							await toFile(part.image_buffer, part.basename, {
+								type: part.mime_type,
+							})
+						);
+					}
+				}
+
+				const openai = await this.getOpenAIImageGen();
+
+				// common options for generation and editing
+				const options = {
+					model: "gpt-image-1",
+					prompt: prompt,
+					n: 1,
+					size: "1024x1024",
+					output_format: "webp",
+				};
+
+				let imgResp: OpenAI.Images.ImagesResponse;
+
+				const startSecs = Date.now() / 1000;
+				if (images.length > 0) {
+					console.log("requesting image EDIT");
+					// the image(s) consists of Core.Uploadable which you can setup using openai's toFile()
+					imgResp = await openai.images.edit({
+						image: images,
+						...options,
+					} as OpenAI.Images.ImageEditParams);
+				} else {
+					console.log("requesting image GENERATION");
+					// https://platform.openai.com/docs/api-reference/images/create?lang=node.js
+					imgResp = await openai.images.generate(
+						options as OpenAI.Images.ImageGenerateParams
+					);
+				}
+
+				const b64_json = imgResp.data?.[0].b64_json;
+				console.log("b64_json.length ===> ", b64_json?.length);
+				const endSecs = Date.now() / 1000;
+				console.log(
+					`Image generation took ${endSecs - startSecs} seconds`
+				);
+				if (b64_json) {
+					const imageBuffer = Buffer.from(b64_json, "base64");
+					// path is just relative to the vault
+					const relName = `${moment().format(
+						"YYYYMMDD-HHmmss"
+					)}_${slugify(prompt.substring(0, 32))}.webp`;
+					this.app.vault.createBinary(relName, imageBuffer);
+
+					const aiLevel = headings[thisHeadingIdx].level + 1;
+					// use more characters for the heading
+					let aiResp = `\n\n${"#".repeat(aiLevel)} AI: ${slugify(
+						prompt.substring(0, 64),
+						false
+					)}...\n\n`;
+					aiResp += `![[${relName}]]\n`;
+					replaceRangeMoveCursor(editor, aiResp);
+				}
 			},
 		});
 
@@ -689,6 +902,15 @@ export default class AIChatAsMDPlugin extends Plugin {
 		return openai;
 	}
 
+	async getOpenAIImageGen() {
+		const openai = new OpenAI({
+			apiKey: this.settings.openAIImageGenAPIKey,
+			// we are running in a browser environment, but we are using obsidian settings to get keys, so we can enable this
+			dangerouslyAllowBrowser: true,
+		});
+		return openai;
+	}
+
 	async getOpenAIStream(
 		messages: OpenAI.ChatCompletionMessageParam[],
 		model: string
@@ -721,14 +943,15 @@ export default class AIChatAsMDPlugin extends Plugin {
 
 			let sysContentParts: OpenAI.Chat.Completions.ChatCompletionContentPart[];
 			try {
-				sysContentParts = await convertRangeToContentParts(
+				sysContentParts = (await convertRangeToContentParts(
 					null,
 					null,
 					systemPromptFile,
 					this.app.vault,
 					this.app.metadataCache,
+					true, // base64Images, so this returns normal ChatCompletionContentPart[]
 					this.settings.debug
-				);
+				)) as OpenAI.Chat.Completions.ChatCompletionContentPart[];
 			} catch (e) {
 				new Notice(
 					`Error parsing system prompt file "${systemPromptFilename}": ${e}`
@@ -786,14 +1009,15 @@ export default class AIChatAsMDPlugin extends Plugin {
 		try {
 			messages.push({
 				role: "user",
-				content: await convertRangeToContentParts(
+				content: (await convertRangeToContentParts(
 					selStartOffset,
 					selEndOffset,
 					markdownFile,
 					this.app.vault,
 					this.app.metadataCache,
+					true, // base64Images
 					this.settings.debug
-				),
+				)) as OpenAI.ChatCompletionContentPart[],
 			});
 		} catch (e) {
 			new Notice(
@@ -930,6 +1154,20 @@ class AIChatAsMDSettingsTab extends PluginSettingTab {
 						systemPromptTextArea.onChanged();
 					});
 			});
+
+		new Setting(containerEl).setName("Image Generation").setHeading();
+		new Setting(containerEl)
+			.setName("API key for OpenAI image generation")
+			.setDesc("Usually of the form sk-xxxx")
+			.addText((text) =>
+				text
+					.setPlaceholder("Enter your secret")
+					.setValue(this.plugin.settings.openAIImageGenAPIKey)
+					.onChange(async (value) => {
+						this.plugin.settings.openAIImageGenAPIKey = value;
+						await this.plugin.saveSettings();
+					})
+			);
 
 		new Setting(containerEl).setName("Advanced").setHeading();
 
