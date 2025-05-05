@@ -549,7 +549,7 @@ interface ChatCompletionChunkWithCitations
 }
 
 /**
- * Ensure that we are in editing source mode to work-around AI streaming updating document out of order.
+ * Ensure that we are in editing source mode to work around AI streaming updating document out of order.
  * @param view
  * @returns
  */
@@ -1032,6 +1032,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 
 		const model = this.getRequestedModel(markdownFile);
 
+		const didSwitchMode = maybeSwitchToSourceMode(view);
 		let citations: string[] = [];
 		try {
 			const stream = await this.getOpenAIStream(messages, model);
@@ -1067,6 +1068,8 @@ export default class AIChatAsMDPlugin extends Plugin {
 
 		replaceRangeMoveCursor(editor, "\n");
 		//statusBarItemEl.setText("AICM done.");
+
+		maybeSwitchBackToPreviewMode(view, didSwitchMode);
 	}
 }
 
