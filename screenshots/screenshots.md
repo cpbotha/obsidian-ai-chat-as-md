@@ -8,6 +8,19 @@ Here I am using `perplexity/sonar` via [OpenRouter](https://openrouter.ai/).
 
 ![screenshot showing perplexity sonar citations list](./obsidian-ai-chat-as-md-perplexity-sonar-citations-20250402.png)
 
+## Image generation and editing
+
+Configure the plugin with a dedicated "API key for OpenAI image generation" and you'll be able to use OpenAI's `gpt-image-1` for conversational image generation and editing.
+
+This only sends the heading containing your cursor, including any images you embed. If there are no images in the current section, it will request a generation and an edit otherwise.
+
+The nice thing is, you can easily add text to the new section created by the AI generation / edit, and continue with more edits. This works with generated images, but of course any other images that you supply.
+
+> [!NOTE]
+> At the time of writing (2025-05-05) an image generation or edit easily takes up to a minute.
+
+![screenshot showing image generation demo](./obsidian-ai-chat-as-md-image-gen-espresso.png)
+
 ## Markdown files as system prompts
 
 Here we've added a special "Memories and facts" section to the system prompt markdown file:

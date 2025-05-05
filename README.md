@@ -24,6 +24,7 @@ Please go to the dedicated [screenshots page](./screenshots/screenshots.md)
 - Multiple branching chats as nested headings anywhere in your notes, see [nesting example](./docs/example_nesting.md)
 - Optionally configure different AI models for each markdown file via the frontmatter, e.g. `aicmd-model: perplexity/sonar`. For that file, that will override the conventional plugin config
 - Render citations as returned by some search-integrated models like Perplexity's Sonar range.
+- Generate and edit images from within your markdown documents. See [screenshots](./screenshots/screenshots.md)
 - Use markdown files as system prompts. Use this for example to build up a library of system prompts for different applications.
 - Optionally configure a different system prompt file for each note via the frontmatter, e.g. `aicmd-system-prompt-file: ai-chats/system prompt productivity.md`
 - Use Obsidian embeds to construct modular and dynamic system prompts, see [screenshots](./screenshots/screenshots.md)

@@ -6,6 +6,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.7.0] - 2025-05-05
+
+### Added
+
+- Support for "conversational" image generation and editing with OpenAI gpt-image-1
+
+### Fixed
+
+- Streaming AI chat response out-of-order. This was due to the editor's live preview mode, which struggled to keep up with sometimes complex and changing markdown coming in. As a work-around, if live preview mode is active, we switch to source mode during streaming, and back to live preview mode afterwards.
+- Remove spaces from inline math example in system prompt. `$Ax = b$` yields correct math typesetting while `$ Ax = b $` does not.
+
 ## [1.6.0] - 2025-05-02
 
 - Add support for citations as returned by the Perplexity Sonar range of search-integrated models
