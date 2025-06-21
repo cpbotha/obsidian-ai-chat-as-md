@@ -810,7 +810,7 @@ __metadata:
     builtin-modules: "npm:3.3.0"
     esbuild: "npm:0.17.3"
     obsidian: "npm:latest"
-    openai: "npm:^4.96.2"
+    openai: "npm:^4.103.0"
     tslib: "npm:2.4.0"
     typescript: "npm:4.7.4"
   languageName: unknown
@@ -829,9 +829,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"openai@npm:^4.96.2":
-  version: 4.96.2
-  resolution: "openai@npm:4.96.2"
+"openai@npm:^4.103.0":
+  version: 4.103.0
+  resolution: "openai@npm:4.103.0"
   dependencies:
     "@types/node": "npm:^18.11.18"
     "@types/node-fetch": "npm:^2.6.4"
@@ -850,7 +850,7 @@ __metadata:
       optional: true
   bin:
     openai: bin/cli
-  checksum: 10c0/db9698258f1033d5155c11ee8868f0e81fad743e991fe118d67bceaa621beeba8047a2d5e3bfde6675f0b1ed53ea5e6860edf4bd376c92fff0f2564bac536d46
+  checksum: 10c0/48aec18e866876aa3ebbcd8b2e00cbd96306926532e80789fe903d4165ab847f60de6e6f3a5f1910813a8fe699f18e5b9010ce10461617c8adeb7bb73099be1c
   languageName: node
   linkType: hard
 
