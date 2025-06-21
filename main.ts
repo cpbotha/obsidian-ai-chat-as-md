@@ -34,9 +34,10 @@ interface AIChatAsMDSettings {
 }
 
 const DEFAULT_SETTINGS: AIChatAsMDSettings = {
-	// openai: https://api.openai.com
-	// openrouter: https://openrouter.ai/api
-	apiHost: "https://api.openai.com",
+	// openai: https://api.openai.com/v1
+	// openrouter: https://openrouter.ai/api/v1
+	// perplexity: https://api.perplexity.ai (exception here, they don't have the v1)
+	apiHost: "https://api.openai.com/v1",
 	openAIAPIKey: "",
 	// openai: gpt-4o
 	// openrouter: anthropic/claude-3.5-sonnet
@@ -533,19 +534,59 @@ function replaceRangeMoveCursor(editor: Editor, text: string) {
 	// even without refresh, it's more reliable when in source mode!
 }
 
-function renderCitations(citations: string[], editor: Editor) {
-	if (citations.length > 0) {
-		const citationList = citations
+function renderSearchResultsOrCitations(
+	roc: CitationsAndSearchResults,
+	editor: Editor
+) {
+	if (roc.search_results && roc.search_results.length > 0) {
+		const citationList = roc.search_results
+			.map(
+				(sr, index) =>
+					`${index + 1}. [${sr.title}](${sr.url})${
+						sr.date ? ` ${sr.date}` : ""
+					}`
+			) // nested template strings ok!
+			.join("\n"); // Join with newlines
+		replaceRangeMoveCursor(editor, `\n\n**Citations:**\n${citationList}`);
+	} else if (roc.citations && roc.citations.length > 0) {
+		const citationList = roc.citations
 			.map((url, index) => `${index + 1}. <${url}>`) // Format as N. <URL>
 			.join("\n"); // Join with newlines
 		replaceRangeMoveCursor(editor, `\n\n**Citations:**\n${citationList}`);
 	}
 }
 
-// Define an interface extending the OpenAI chunk type with optional citations
-interface ChatCompletionChunkWithCitations
-	extends OpenAI.Chat.Completions.ChatCompletionChunk {
-	citations: string[];
+interface SearchResult {
+	title: string;
+	url: string;
+	date: string;
+}
+
+interface CitationsAndSearchResults {
+	citations?: string[];
+	/**
+	 * On May 29, perplexity introduced search_results; they will eventually deprecate search_results
+	 * https://community.perplexity.ai/t/new-feature-search-results-field-with-richer-metadata/398
+	 */
+	search_results?: SearchResult[];
+}
+
+// Define an interface extending the OpenAI chunk type with optional citations or search_results
+interface ChatCompletionChunkWithCitationsOrSearchResults
+	extends OpenAI.Chat.Completions.ChatCompletionChunk,
+		CitationsAndSearchResults {}
+
+function extractSearchResultsOrCitations(
+	chunk: ChatCompletionChunkWithCitationsOrSearchResults,
+	roc: CitationsAndSearchResults
+) {
+	if (chunk.search_results && chunk.search_results.length > 0) {
+		roc.search_results = chunk.search_results;
+	}
+
+	if (chunk.citations && chunk.citations.length > 0) {
+		roc.citations = chunk.citations;
+	}
 }
 
 /**
@@ -640,7 +681,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 				// DEBUG bypass OpenAI
 				// return null;
 
-				let citations: string[] = [];
+				let roc: CitationsAndSearchResults = {};
 
 				const didSwitchMode = maybeSwitchToSourceMode(view);
 				try {
@@ -653,12 +694,28 @@ export default class AIChatAsMDPlugin extends Plugin {
 						const content = chunk.choices[0]?.delta?.content || "";
 						replaceRangeMoveCursor(editor, content);
 						if (chunk.usage) {
+							// perplexity api does this for every chunk!
 							console.log("OpenAI API usage:", chunk.usage);
 						}
-						const chunkWithCitations =
-							chunk as ChatCompletionChunkWithCitations;
-						if ((chunkWithCitations.citations ?? []).length > 0) {
-							citations = chunkWithCitations.citations;
+
+						extractSearchResultsOrCitations(
+							chunk as ChatCompletionChunkWithCitationsOrSearchResults,
+							roc
+						);
+
+						// openrouter can add exa search results if you append :online to model
+						// https://openrouter.ai/docs/features/web-search
+						// perplexity and chatgpt have search built in, just remember web_search_options as part of your request
+						// https://platform.openai.com/docs/guides/tools-web-search?api-mode=chat
+						// note openai limitations! completions = always search, use responses API for tool use
+						// conclusions:
+						// - perplexity in this context still the best
+						// - :online search results are passed to AI, but we never get them back. With multi-turn conversations, we don't know
+						//   where and when the search results are being inserted
+						if (chunk.choices[0]?.delta?.annotations) {
+							// tested to work 2025-05-27, each annotation is
+							// {type: "url_citation", url_citation: {content, start_index, end_index, title: "...", url: "..."}}
+							//console.log(chunk.choices[0].delta.annotations);
 						}
 					}
 
@@ -668,7 +725,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 				}
 
 				// create numbered list of citations from citations array
-				renderCitations(citations, editor);
+				renderSearchResultsOrCitations(roc, editor);
 
 				// BUG: on iPhone, this sometimes starts before the last 2 or 3 characters of AI message
 				// tested requestAnimationFrame and setTimeout here, weirdly the first chunk of the AI message came AFTER this heading!
@@ -885,16 +942,45 @@ export default class AIChatAsMDPlugin extends Plugin {
 	}
 
 	async getOpenAI() {
+		// openrouter.ai/api/vi/chat/completions/...
+		// api.openai.com/v1/chat/completions/...
+		// api.perplexity.ai/chat/completions/... WHOOPS
+		// in retrospect, I would have wanted to define this as the API host up to the v1, but now we have to handle the legacy situation
+		let baseURL = this.settings.apiHost;
+		if (
+			baseURL.contains("api.openai.com") ||
+			baseURL.contains("openrouter.ai")
+		) {
+			if (!baseURL.contains("v1")) {
+				baseURL += "/v1";
+			}
+		}
+		console.log(`Using API base URL ${baseURL}`);
+		let defaultHeaders: Record<string, string | null> = {
+			"HTTP-Referer": "https://github.com/cpbotha/obsidian-ai-chat-as-md", // Optional, for including your app on openrouter.ai rankings.
+			"X-Title": "Obsidian AI Chat as Markdown", // Optional. Shows in rankings on openrouter.ai.
+		};
+		if (baseURL.contains("api.perplexity.ai")) {
+			defaultHeaders = {
+				// openai package adds all of the x-stainless headers
+				// however, perplexity API CORS setup then refuses us
+				// it also refuses http-referer and x-title, so we don't even add them
+				"x-stainless-os": null,
+				"x-stainless-runtime": null,
+				"x-stainless-arch": null,
+				"x-stainless-lang": null,
+				"x-stainless-helper-method": null,
+				"x-stainless-timeout": null,
+				"x-stainless-package-version": null,
+				"x-stainless-runtime-version": null,
+				"x-stainless-retry-count": null,
+			};
+		}
 		const openai = new OpenAI({
-			// "https://openrouter.ai/api/v1" or "https://api.openai.com/v1"
-			baseURL: `${this.settings.apiHost}/v1`,
+			baseURL: baseURL,
 			apiKey: this.settings.openAIAPIKey,
 			timeout: 30 * 1000, // 30 seconds
-			defaultHeaders: {
-				"HTTP-Referer":
-					"https://github.com/cpbotha/obsidian-ai-chat-as-md", // Optional, for including your app on openrouter.ai rankings.
-				"X-Title": "Obsidian AI Chat as Markdown", // Optional. Shows in rankings on openrouter.ai.
-			},
+			defaultHeaders: defaultHeaders,
 			// we are running in a browser environment, but we are using obsidian settings to get keys, so we can enable this
 			dangerouslyAllowBrowser: true,
 		});
@@ -921,6 +1007,11 @@ export default class AIChatAsMDPlugin extends Plugin {
 			model: model,
 			messages: messages,
 			stream: true,
+			// adding this primarily for perplexity, but it seems some openai models also support it
+			// https://docs.perplexity.ai/guides/search-context-size-guide
+			// https://platform.openai.com/docs/guides/tools-web-search?api-mode=chat
+			// https://openrouter.ai/docs/features/web-search#specifying-search-context-size
+			web_search_options: { search_context_size: "medium" },
 		});
 	}
 
@@ -1033,7 +1124,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 		const model = this.getRequestedModel(markdownFile);
 
 		const didSwitchMode = maybeSwitchToSourceMode(view);
-		let citations: string[] = [];
+		let roc: CitationsAndSearchResults = {};
 		try {
 			const stream = await this.getOpenAIStream(messages, model);
 			//statusBarItemEl.setText("AICM streaming...");
@@ -1050,11 +1141,10 @@ export default class AIChatAsMDPlugin extends Plugin {
 				const content = chunk.choices[0]?.delta?.content || "";
 				replaceRangeMoveCursor(editor, content);
 				// if there are citations in the chunk, save them
-				const chunkWithCitations =
-					chunk as ChatCompletionChunkWithCitations;
-				if ((chunkWithCitations.citations ?? []).length > 0) {
-					citations = chunkWithCitations.citations;
-				}
+				extractSearchResultsOrCitations(
+					chunk as ChatCompletionChunkWithCitationsOrSearchResults,
+					roc
+				);
 				if (chunk.usage) {
 					console.log("OpenAI API usage:", chunk.usage);
 				}
@@ -1064,7 +1154,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 		}
 
 		// create numbered list of citations from citations array
-		renderCitations(citations, editor);
+		renderSearchResultsOrCitations(roc, editor);
 
 		replaceRangeMoveCursor(editor, "\n");
 		//statusBarItemEl.setText("AICM done.");
@@ -1089,12 +1179,12 @@ class AIChatAsMDSettingsTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("API host")
 			.setDesc(
-				"OpenAI-style API host, e.g. https://api.openai.com or https://openrouter.ai/api"
+				"OpenAI-style API host up to just before /chat/, e.g. https://api.openai.com/v1 or https://openrouter.ai/api/v1 or https://api.perplexity.ai"
 			)
 			.addText((text) =>
 				text
 					.setPlaceholder(
-						"Enter the API host, e.g. https://api.openai.com"
+						"Enter the API host, e.g. https://api.openai.com/v1"
 					)
 					.setValue(this.plugin.settings.apiHost)
 					.onChange(async (value) => {
