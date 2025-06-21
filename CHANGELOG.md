@@ -6,6 +6,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.8.0] - 2025-06-22
+
+### Added
+
+- Support for perplexity API
+  1. Remove x-stainless and other CORS-blocked headers
+  2. Add `web_search_options` for medium `search_context_size`
+  3. Parse and render new more detailed `search_results` when these are available, instead of `citations`
+
 ## [1.7.0] - 2025-05-05
 
 ### Added
