@@ -712,11 +712,11 @@ export default class AIChatAsMDPlugin extends Plugin {
 						// - perplexity in this context still the best
 						// - :online search results are passed to AI, but we never get them back. With multi-turn conversations, we don't know
 						//   where and when the search results are being inserted
-						if (chunk.choices[0]?.delta?.annotations) {
-							// tested to work 2025-05-27, each annotation is
-							// {type: "url_citation", url_citation: {content, start_index, end_index, title: "...", url: "..."}}
-							//console.log(chunk.choices[0].delta.annotations);
-						}
+						// if (chunk.choices[0]?.delta?.annotations) {
+						// tested to work 2025-05-27, each annotation is
+						// {type: "url_citation", url_citation: {content, start_index, end_index, title: "...", url: "..."}}
+						//console.log(chunk.choices[0].delta.annotations);
+						// }
 					}
 
 					//statusBarItemEl.setText("AICM done.");
