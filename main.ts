@@ -20,6 +20,7 @@ import {
 } from "obsidian";
 
 import OpenAI, { toFile } from "openai";
+import type { Stream } from "openai/streaming";
 import type { FileLike } from "openai/uploads";
 
 interface AIChatAsMDSettings {
@@ -1002,7 +1003,7 @@ export default class AIChatAsMDPlugin extends Plugin {
 	async getOpenAIStream(
 		messages: OpenAI.ChatCompletionMessageParam[],
 		model: string
-	) {
+	): Promise<Stream<OpenAI.Chat.Completions.ChatCompletionChunk>> {
 		const openai = await this.getOpenAI();
 
 		const body = {
@@ -1019,10 +1020,15 @@ export default class AIChatAsMDPlugin extends Plugin {
 			// https://platform.openai.com/docs/guides/tools-web-search?api-mode=chat
 			// https://docs.perplexity.ai/guides/search-context-size-guide
 			// https://openrouter.ai/docs/features/web-search#specifying-search-context-size
-			body.web_search_options = { search_context_size: "medium" };
+			(body as any).web_search_options = {
+				search_context_size: "medium",
+			};
 		}
 
-		return openai.chat.completions.create(body);
+		// stream = true, so create should return a stream
+		return openai.chat.completions.create(body) as Promise<
+			Stream<OpenAI.Chat.Completions.ChatCompletionChunk>
+		>;
 	}
 
 	async getSystemPrompt(markdownFile: TFile) {
