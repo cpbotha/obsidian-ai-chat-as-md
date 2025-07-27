@@ -4,19 +4,19 @@ import {
 	type Editor,
 	type EditorPosition,
 	type EmbedCache,
+	type HeadingCache,
 	type MarkdownView,
 	type MetadataCache,
+	moment,
 	Notice,
 	Plugin,
 	PluginSettingTab,
-	Setting,
-	type TFile,
-	type TextAreaComponent,
-	type Vault,
 	parseLinktext,
 	resolveSubpath,
-	type HeadingCache,
-	moment,
+	Setting,
+	type TextAreaComponent,
+	type TFile,
+	type Vault,
 } from "obsidian";
 
 import OpenAI, { toFile } from "openai";
@@ -148,6 +148,8 @@ type ExtendedChatCompletionContentPart =
  * Convert a subsection of a markdown file into a list of OpenAI.ChatCompletionContentPart
  *
  * This will take care of the main text, as well as text (whole file, heading, block) and image embeds.
+ *
+ * Note: This function is intended to take care of a single user message, including its embeds.
  *
  * @param startOffset Starting 0-based offset of the range to convert. Pass null / undefined for start of file.
  * @param endOffset Ending non-inclusive 0-based offset of the range to convert. Pass null / undefined for end of file.
@@ -1003,16 +1005,24 @@ export default class AIChatAsMDPlugin extends Plugin {
 	) {
 		const openai = await this.getOpenAI();
 
-		return openai.chat.completions.create({
+		const body = {
 			model: model,
 			messages: messages,
 			stream: true,
-			// adding this primarily for perplexity, but it seems some openai models also support it
-			// https://docs.perplexity.ai/guides/search-context-size-guide
+		};
+
+		const isOpenAI = openai.baseURL.contains("api.openai.com");
+		if ((isOpenAI && model.contains("search")) || !isOpenAI) {
+			// adding this primarily for perplexity / openrouter, but it seems some openai models also support it
+			// however, OpenAI API will error 400 if you use it on non-search models
+			// thanks for the report @aaubry https://github.com/cpbotha/obsidian-ai-chat-as-md/issues/5
 			// https://platform.openai.com/docs/guides/tools-web-search?api-mode=chat
+			// https://docs.perplexity.ai/guides/search-context-size-guide
 			// https://openrouter.ai/docs/features/web-search#specifying-search-context-size
-			web_search_options: { search_context_size: "medium" },
-		});
+			body.web_search_options = { search_context_size: "medium" };
+		}
+
+		return openai.chat.completions.create(body);
 	}
 
 	async getSystemPrompt(markdownFile: TFile) {
