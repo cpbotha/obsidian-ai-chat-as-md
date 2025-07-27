@@ -6,6 +6,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.8.1] - 2025-07-27
+
+### Fixed
+
+- Don't send `web_search_options` to OpenAI models that don't support it
+
 ## [1.8.0] - 2025-06-22
 
 ### Added
